@@ -1,11 +1,15 @@
-import socket
+import socket, time
 
 import Irc
 
 class IrcServer:
 	def send(self, *args):
 		print(repr(args))
+		t = self.lastsend - time.time() + 0.25
+		if t > 0:
+			time.sleep(t)
 		self.connection.sendall(Irc.compile(*args) + "\n")
+		self.lastsend = time.time()
 
 	def unread(self, data):
 		self.unseen.extend(data)
@@ -37,4 +41,5 @@ class IrcServer:
 		self.password = password
 		self.connection = None
 		self.unseen = []
+		self.lastsend = 0
 		self.connect()

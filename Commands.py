@@ -152,4 +152,7 @@ def load(serv, reply, src, module, *_):
 
 def run(serv, reply, src, *args):
 	"""sudo"""
-	return repr(eval(" ".join(args)))
+	try:
+		return repr(eval(" ".join(args)))
+	except SyntaxError:
+		exec(" ".join(args))

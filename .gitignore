@@ -1,0 +1,4 @@
+*.pyc
+dogecoind
+config.py
+*.log
