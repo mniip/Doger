@@ -1,3 +1,5 @@
+import traceback, sys
+
 import Irc, Commands
 
 def numeric_376(serv, *_):
@@ -23,13 +25,16 @@ def PRIVMSG(serv, source, target, text):
 			args = args.split(" ")
 		if command[0] != '_':
 			cmd = getattr(Commands, command, None)
-			if cmd:
-				try:
-					ret = cmd(serv, reply, source, *args)
-				except Exception as e:
-					ret = repr(e)
-				if isinstance(ret, str):
-					ret = ret.translate(None, "\r\n\a\b\x00")
-					if not len(ret):
-						ret = "[I have nothing to say]"
-					serv.send("PRIVMSG", reply, src + ": " + ret)
+			if not cmd.__doc__ or cmd.__doc__.find("sudo") == -1 or src == "mniip":
+				if cmd:
+					try:
+						ret = cmd(serv, reply, source, *args)
+					except Exception as e:
+						type, value, tb = sys.exc_info()
+						traceback.print_tb(tb)
+						ret = repr(e)
+					if isinstance(ret, str):
+						ret = ret.translate(None, "\r\n\a\b\x00")
+						if not len(ret):
+							ret = "[I have nothing to say]"
+						serv.send("PRIVMSG", reply, src + ": " + ret)

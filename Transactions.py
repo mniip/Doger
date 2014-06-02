@@ -32,7 +32,7 @@ def withdraw(acct, addr, amt):
 		return False
 
 def verify_address(addr):
-	inf = validateaddress(addr)
+	inf = conn.validateaddress(addr)
 	return inf.isvalid
 
 """

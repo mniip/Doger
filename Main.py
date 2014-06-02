@@ -1,9 +1,11 @@
-import socket, errno, time, sys
-import Transactions, Hooks
+import socket, errno, time
+import Hooks
 from IrcServer import *
 
-serv = IrcServer(sys.argv[1], sys.argv[2], sys.argv[3])
-serv.autojoin = sys.argv[4].split(",")
+conf = eval(open('config.py', 'r').read())
+
+serv = IrcServer(conf["server"], conf["nick"], conf["password"])
+serv.autojoin = conf["autojoin"].split(",")
 while True:
 	try:
 		cmd = serv.read()
