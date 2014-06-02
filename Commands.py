@@ -31,7 +31,7 @@ def withdraw(serv, reply, src, *arg):
 			print(amount)
 		else:
 			try:
-				amount = int(arg[1])
+				amount = int(arg[1])-1
 				if amount <= 0:
 					raise ValueError()
 			except ValueError as e:
