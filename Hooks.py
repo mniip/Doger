@@ -1,6 +1,7 @@
-import traceback, sys
+# coding=utf8
+import traceback, sys, re
 
-import Irc, Commands
+import Irc, Commands, Transactions
 
 def numeric_376(serv, *_):
 	for channel in serv.autojoin:
@@ -38,3 +39,12 @@ def PRIVMSG(serv, source, target, text):
 						if not len(ret):
 							ret = "[I have nothing to say]"
 						serv.send("PRIVMSG", reply, src + ": " + ret)
+	elif source.split("@")[1] == "lucas.fido.pw":
+		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
+		if not m:
+			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
+		if m:
+			nick = m.group(1)
+			address = Transactions.deposit_address(Irc.toupper(nick))
+			serv.send("PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
+			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")

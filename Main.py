@@ -23,3 +23,7 @@ while True:
 		else:
 			print(repr(e))
 			break
+	except Exception as e:
+		type, value, tb = sys.exc_info()
+		traceback.print_tb(tb)
+		ret = repr(e)
