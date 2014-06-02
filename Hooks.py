@@ -1,7 +1,7 @@
 # coding=utf8
 import traceback, sys, re
 
-import Irc, Commands, Transactions
+import Irc, Transactions, Commands
 
 def numeric_376(serv, *_):
 	for channel in serv.autojoin:
@@ -10,9 +10,13 @@ def numeric_376(serv, *_):
 def PING(serv, *_):
 	serv.send("PONG")
 
+class Request():
+	pass
+
 def PRIVMSG(serv, source, target, text):
-	if text[0] == '%':
-		text = text[1:]
+	if text[0] == '%' or target == serv.nick:
+		if text[0] == '%':
+			text = text[1:]
 		src = Irc.get_nickname(source)
 		if target == serv.nick:
 			reply = src
@@ -25,11 +29,15 @@ def PRIVMSG(serv, source, target, text):
 			command, args = text.split(" ", 1)
 			args = args.split(" ")
 		if command[0] != '_':
-			cmd = getattr(Commands, command, None)
-			if not cmd.__doc__ or cmd.__doc__.find("sudo") == -1 or src == "mniip":
+			cmd = Commands.commands.get(command, None)
+			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or src == "mniip":
 				if cmd:
 					try:
-						ret = cmd(serv, reply, source, *args)
+						request = Request()
+						request.serv = serv
+						request.reply = reply
+						request.source = source
+						ret = cmd(request, args)
 					except Exception as e:
 						type, value, tb = sys.exc_info()
 						traceback.print_tb(tb)

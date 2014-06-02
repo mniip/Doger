@@ -1,4 +1,4 @@
-import socket, errno, time
+import socket, errno, time, sys, traceback
 import Hooks
 from IrcServer import *
 

@@ -2,29 +2,35 @@
 import sys
 import Irc, Transactions, Logger
 
-def ping(*_):
+commands = {}
+
+def ping(req, _):
+	"""%ping - Pong"""
 	return "Pong"
+commands["ping"] = ping
 
-def acc(serv, reply, src, who, *_):
-	return repr(Irc.account(serv, who))
-
-def balance(serv, reply, src, *_):
-	acct = Irc.toupper(Irc.get_nickname(src))
+def balance(req, _):
+	"""%balance - Displays your confirmed and unconfirmed balance"""
+	acct = Irc.toupper(Irc.get_nickname(req.source))
 	confirmed = int(Transactions.balance(acct))
 	full = int(Transactions.balance(acct, 0))
 	if full == confirmed:
 		return "Your balance is %iƉ" % (confirmed)
 	else:
 		return "Your balance is %iƉ (+%iƉ unconfirmed)" % (confirmed, full - confirmed)
+commands["balance"] = balance
 
-def deposit(serv, reply, src, *_):
-	acct = Irc.toupper(Irc.get_nickname(src))
+def deposit(req, _):
+	"""%deposit - Displays your deposit address"""
+	acct = Irc.toupper(Irc.get_nickname(req.source))
 	return "To deposit, send coins to %s (transactions will be credited after 4 confirmations)" % Transactions.deposit_address(acct).encode("utf8")
+commands["deposit"] = deposit
 
-def withdraw(serv, reply, src, *arg):
+def withdraw(req, arg):
+	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, send the whole balance"""
 	if len(arg) == 0:
 		return "%withdraw <address> [amount]"
-	acct = Irc.toupper(Irc.get_nickname(src))
+	acct = Irc.toupper(Irc.get_nickname(req.source))
 	balance = int(Transactions.balance(acct))
 	if balance:
 		if len(arg) == 1:
@@ -53,11 +59,13 @@ def withdraw(serv, reply, src, *arg):
 			return "Something went wrong, report this to mniip"
 	else:
 		return "You don't have any coins on your account"
+commands["withdraw"] = withdraw
 
-def tip(serv, reply, src, *arg):
+def tip(req, arg):
+	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname"""
 	if len(arg) < 2:
 		return "%tip <target> <amount>"
-	acct = Irc.toupper(Irc.get_nickname(src))
+	acct = Irc.toupper(Irc.get_nickname(req.source))
 	balance = Transactions.balance(acct)
 	if balance:
 		try:
@@ -70,7 +78,7 @@ def tip(serv, reply, src, *arg):
 		toacct = Irc.toupper(to)
 		if toacct[-4:] == "SERV":
 			return "Services don't accept doge"
-		if not len(to)or not Irc.anyone(serv, to):
+		if not len(to)or not Irc.anyone(req.serv, to):
 			return to + " is not online"
 		if amount > balance:
 			return "You tried to tip %iƉ but you only have %iƉ" % (amount, balance)
@@ -78,22 +86,24 @@ def tip(serv, reply, src, *arg):
 		Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, balance, toacct, Transactions.balance(toacct)))
 		if Transactions.tip(acct, toacct, amount):
 			Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-			if Irc.toupper(Irc.get_nickname(src)) == Irc.toupper(reply):
-				serv.send("PRIVMSG", reply, "Done [%s]" % (id))
+			if Irc.toupper(Irc.get_nickname(req.source)) == Irc.toupper(req.reply):
+				req.serv.send("PRIVMSG", req.reply, "Done [%s]" % (id))
 			else:
-				serv.send("PRIVMSG", reply, "Such %s tipped much %iƉ to %s! (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(src), amount, to, id))
-			serv.send("PRIVMSG", to, "Such %s has tipped you %iƉ (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(src), amount, id))
+				req.serv.send("PRIVMSG", req.reply, "Such %s tipped much %iƉ to %s! (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(req.source), amount, to, id))
+			req.serv.send("PRIVMSG", to, "Such %s has tipped you %iƉ (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(req.source), amount, id))
 			return None
 		else:
 			Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 			return "Something went wrong, report this to mniip"
 	else:
 		return "You don't have any coins on your account"
+commands["tip"] = tip
 
-def mtip(serv, reply, src, *arg):
+def mtip(req, arg):
+	"""%mtip <targ1> <amt1> [<targ2> <amt2> ...] - Send multiple tips at once"""
 	if not len(arg) or len(arg) % 2:
 		return "%mtip <targ1> <amt1> [<targ2> <amt2> ...]"
-	acct = Irc.toupper(Irc.get_nickname(src))
+	acct = Irc.toupper(Irc.get_nickname(req.source))
 	balance = Transactions.balance(acct)
 	for i in range(0, len(arg), 2):
 		try:
@@ -112,7 +122,7 @@ def mtip(serv, reply, src, *arg):
 				totip += int(arg[i + 1])
 				found = True
 				break
-		if not found and Irc.anyone(serv, arg[i]):
+		if not found and Irc.anyone(req.serv, arg[i]):
 			tips[arg[i]] = int(arg[i + 1])
 			totip += int(arg[i + 1])
 	if totip > balance:
@@ -141,18 +151,39 @@ def mtip(serv, reply, src, *arg):
 		for to, amt, id in failed:
 			output += " %s %d [%s]" % (to, amt, id)
 	return output
+commands["mtip"] = mtip
 
-def help(serv, reply, src, *_):
-	return "Balance: %balance   To deposit: %deposit   To withdraw: %withdraw <address> [amount]   To tip: %tip <target> <amount>"
+def _help(req, arg):
+	"""%help - list of commands; %help <command> - help for specific command"""
+	if len(arg):
+		if arg[0][0] == '%':
+			name = arg[0][1:]
+		else:
+			name = arg[0]
+		cmd = commands.get(name, None)
+		if cmd:
+			return cmd.__doc__.split("\n")[0]
+	else:
+		return "Commands: %tip %balance %withdraw %deposit %mtip %help %owner   Try: %help <command>"
+commands["help"] = _help
 
-def load(serv, reply, src, module, *_):
-	"""sudo"""
-	reload(sys.modules[module])
+def owner(req, _):
+	"""%owner - display the owner of the bot"""
+	return "Doger is written and hosted by mniip, with a little help from TheDoctorisaDoge. https://github.com/mniip/Doger"
+commands["owner"] = owner
+
+def load(req, arg):
+	"""
+	admin"""
+	reload(sys.modules[arg[0]])
 	return "Done"
+commands["reload"] = load
 
-def run(serv, reply, src, *args):
-	"""sudo"""
+def _exec(req, arg):
+	"""
+	admin"""
 	try:
-		return repr(eval(" ".join(args)))
+		return repr(eval(" ".join(arg)))
 	except SyntaxError:
-		exec(" ".join(args))
+		exec(" ".join(arg))
+commands["exec"] = _exec
