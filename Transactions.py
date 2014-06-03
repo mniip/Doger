@@ -1,7 +1,21 @@
+import threading
 import dogecoinrpc
 from dogecoinrpc.exceptions import InsufficientFunds
 
 conn = dogecoinrpc.connect_to_local()
+lock = threading.Lock()
+
+class RpcLock(object):
+	def __enter__(self):
+		lock.acquire()
+	
+	def __exit__(self, _, __, ___):
+		lock.release()
+
+rpclock = RpcLock()
+
+def get_lock():
+	return rpclock
 
 def tip(acct1, acct2, amt):
 	if amt < 1:
