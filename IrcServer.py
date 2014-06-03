@@ -37,6 +37,18 @@ class IrcServer:
 	def disconnect(self):
 		self.send("QUIT")
 		self.connection = None
+	
+	def is_ignored(self, host):
+		r = self.ignored.get(host, None)
+		if r:
+			if r < time.time():
+				del self.ignored[host]
+				return False
+			return True
+		return False
+
+	def ignore(self, host, duration):
+		self.ignored[host] = time.time() + duration
 
 	def __init__(self, config):
 		self.config = config
@@ -44,6 +56,8 @@ class IrcServer:
 		self.unseen = []
 		self.lastsend = 0
 		self.running = True
+		self.ignored = {}
+		self.flood_score = {}
 		self.connect()
 
 	def loop(self):
@@ -53,4 +67,6 @@ class IrcServer:
 				hook = Hooks.hooks.get(cmd[1], None)
 				if hook:
 					hook(self, cmd[0], *cmd[2:])
-			
+
+	def is_admin(self, hostmask):
+		return self.config["admins"].get(hostmask, False)

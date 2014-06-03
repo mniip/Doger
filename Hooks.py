@@ -1,5 +1,5 @@
 # coding=utf8
-import traceback, sys, re
+import traceback, sys, re, time
 
 import Irc, Transactions, Commands
 
@@ -18,7 +18,18 @@ class Request():
 	pass
 
 def message(serv, source, target, text):
+	host = Irc.get_host(source)
 	if text[0] == '%' or target == serv.nick:
+		if serv.is_ignored(host):
+			return
+		t = time.time()
+		score = serv.flood_score.get(host, (t, 0))
+		score = max(score[1] + score[0] - t, 0) + 4
+		if score > 40 and not serv.is_admin(source):
+			serv.ignore(host, 240)
+			serv.send("PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds")
+			return
+		serv.flood_score[host] = (t, score)
 		if text[0] == '%':
 			text = text[1:]
 		src = Irc.get_nickname(source)
@@ -34,7 +45,7 @@ def message(serv, source, target, text):
 			args = args.split(" ")
 		if command[0] != '_':
 			cmd = Commands.commands.get(command, None)
-			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or src == "mniip":
+			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or serv.is_admin(source):
 				if cmd:
 					try:
 						request = Request()
@@ -51,7 +62,7 @@ def message(serv, source, target, text):
 						if not len(ret):
 							ret = "[I have nothing to say]"
 						serv.send("PRIVMSG", reply, src + ": " + ret)
-	elif source.split("@")[1] == "lucas.fido.pw":
+	elif host == "lucas.fido.pw":
 		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
 		if not m:
 			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)

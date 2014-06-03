@@ -20,6 +20,9 @@ def parse(cmd):
 def get_nickname(hostmask):
 	return hostmask.split("!", 1)[0]
 
+def get_host(hostmask):
+	return hostmask.split("@", 1)[1]
+
 def toupper(nickname):
 	return nickname.translate(ircupper)
 

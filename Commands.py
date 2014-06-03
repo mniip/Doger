@@ -180,7 +180,8 @@ commands["help"] = _help
 def load(req, arg):
 	"""
 	admin"""
-	reload(sys.modules[arg[0]])
+	for mod in arg:
+		reload(sys.modules[mod])
 	return "Done"
 commands["reload"] = load
 
@@ -198,3 +199,9 @@ def die(req, arg):
 	admin"""
 	req.serv.running = False
 commands["die"] = die
+
+def ignore(req, arg):
+	"""
+	admin"""
+	req.serv.ignore(arg[0], int(arg[1]))
+commands["ignore"] = ignore
