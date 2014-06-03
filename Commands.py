@@ -42,12 +42,15 @@ def withdraw(req, arg):
 				if amount <= 0:
 					raise ValueError()
 			except ValueError as e:
-				return arg[1] + " - invalid amount"
+				req.serv.send("PRIVMSG", Irc.get_nickname(req.source), repr(arg[1]) + " - invalid amount")
+				return None
 		to = arg[0]
 		if amount > balance - 1:
-			return "You tried to withdraw %iƉ (+1Ɖ fee) but you only have %iƉ" % (amount, balance)
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You tried to withdraw %iƉ (+1Ɖ fee) but you only have %iƉ" % (amount, balance))
+			return None
 		if not Transactions.verify_address(to):
-			return to + " doesn't seem to be a valid dogecoin address"
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), to + " doesn't seem to be a valid dogecoin address")
+			return None
 		id = Logger.get_id()
 		Logger.log(id, "moving %d(+1) from acct:%s(%d) to %s" % (amount, acct, balance, to))
 		tx = Transactions.withdraw(acct, to, amount)
@@ -58,7 +61,8 @@ def withdraw(req, arg):
 			Logger.log(id, "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
 			return "Something went wrong, report this to mniip"
 	else:
-		return "You don't have any coins on your account"
+		req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You don't have any coins on your account")
+		return None
 commands["withdraw"] = withdraw
 
 def tip(req, arg):
@@ -73,15 +77,18 @@ def tip(req, arg):
 			if amount <= 0:
 				raise ValueError()
 		except ValueError as e:
-			return arg[1] + " - invalid amount"
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), repr(arg[1]) + " - invalid amount")
+			return None
 		to = arg[0]
 		toacct = Irc.toupper(to)
 		if toacct[-4:] == "SERV":
 			return "Services don't accept doge"
 		if not len(to)or not Irc.anyone(req.serv, to):
-			return to + " is not online"
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), to + " is not online")
+			return None
 		if amount > balance:
-			return "You tried to tip %iƉ but you only have %iƉ" % (amount, balance)
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You tried to tip %iƉ but you only have %iƉ" % (amount, balance))
+			return None
 		id = Logger.get_id()
 		Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, balance, toacct, Transactions.balance(toacct)))
 		if Transactions.tip(acct, toacct, amount):
@@ -89,14 +96,15 @@ def tip(req, arg):
 			if Irc.toupper(Irc.get_nickname(req.source)) == Irc.toupper(req.reply):
 				req.serv.send("PRIVMSG", req.reply, "Done [%s]" % (id))
 			else:
-				req.serv.send("PRIVMSG", req.reply, "Such %s tipped much %iƉ to %s! (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(req.source), amount, to, id))
-			req.serv.send("PRIVMSG", to, "Such %s has tipped you %iƉ (to claim /msg Doger %%help) [%s]" % (Irc.get_nickname(req.source), amount, id))
+				req.serv.send("PRIVMSG", req.reply, "Such %s tipped much %iƉ to %s! (to claim /msg Doger help) [%s]" % (Irc.get_nickname(req.source), amount, to, id))
+			req.serv.send("PRIVMSG", to, "Such %s has tipped you %iƉ (to claim /msg Doger help) [%s]" % (Irc.get_nickname(req.source), amount, id))
 			return None
 		else:
 			Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 			return "Something went wrong, report this to mniip"
 	else:
-		return "You don't have any coins on your account"
+		req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You don't have any coins on your account")
+		return None
 commands["tip"] = tip
 
 def mtip(req, arg):
@@ -111,7 +119,8 @@ def mtip(req, arg):
 			if a <= 0:
 				raise ValueError()
 		except ValueError as e:
-			return arg[i + 1] + " - invalid amount"
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), repr(arg[i + 1]) + " - invalid amount")
+			return None
 	tips = {}
 	totip = 0
 	for i in range(0, len(arg), 2):
@@ -126,7 +135,8 @@ def mtip(req, arg):
 			tips[arg[i]] = int(arg[i + 1])
 			totip += int(arg[i + 1])
 	if totip > balance:
-		return "You tried to tip %iƉ but you only have %iƉ" % (amount, balance)
+		req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You tried to tip %iƉ but you only have %iƉ" % (amount, balance))
+		return None
 	tipped = []
 	failed = []
 	for to in tips:
@@ -164,13 +174,8 @@ def _help(req, arg):
 		if cmd:
 			return cmd.__doc__.split("\n")[0]
 	else:
-		return "Commands: %tip %balance %withdraw %deposit %mtip %help %owner   Try: %help <command>"
+		return "A fido replacement bot by mniip. Commands: %tip %balance %withdraw %deposit %mtip %help   Try: %help <command>"
 commands["help"] = _help
-
-def owner(req, _):
-	"""%owner - display the owner of the bot"""
-	return "Doger is written and hosted by mniip, with a little help from TheDoctorisaDoge. https://github.com/mniip/Doger"
-commands["owner"] = owner
 
 def load(req, arg):
 	"""
@@ -187,3 +192,9 @@ def _exec(req, arg):
 	except SyntaxError:
 		exec(" ".join(arg))
 commands["exec"] = _exec
+
+def die(req, arg):
+	"""
+	admin"""
+	req.serv.running = False
+commands["die"] = die
