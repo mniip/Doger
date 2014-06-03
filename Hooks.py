@@ -3,17 +3,21 @@ import traceback, sys, re
 
 import Irc, Transactions, Commands
 
-def numeric_376(serv, *_):
-	for channel in serv.autojoin:
-		serv.send("JOIN", channel)
+hooks = {}
 
-def PING(serv, *_):
+def end_of_motd(serv, *_):
+	for channel in serv.config["autojoin"]:
+		serv.send("JOIN", channel)
+hooks["376"] = end_of_motd
+
+def ping(serv, *_):
 	serv.send("PONG")
+hooks["PING"] = ping
 
 class Request():
 	pass
 
-def PRIVMSG(serv, source, target, text):
+def message(serv, source, target, text):
 	if text[0] == '%' or target == serv.nick:
 		if text[0] == '%':
 			text = text[1:]
@@ -56,3 +60,4 @@ def PRIVMSG(serv, source, target, text):
 			address = Transactions.deposit_address(Irc.toupper(nick))
 			serv.send("PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
 			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
+hooks["PRIVMSG"] = message

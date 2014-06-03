@@ -1,6 +1,6 @@
 import socket, time
 
-import Irc
+import Irc, Hooks
 
 class IrcServer:
 	def send(self, *args):
@@ -26,20 +26,31 @@ class IrcServer:
 		return Irc.parse(line.rstrip('\r'))
 
 	def connect(self):
-		self.connection = socket.create_connection((self.host, self.port), None)
-		self.connection.settimeout(0.0)
+		self.connection = socket.create_connection((self.config["host"], self.config["port"]), None)
+		self.connection.settimeout(None)
 		self.buffer = ''
-		self.send("NICK", self.nick)
-		self.send("USER", self.nick, "*", "*", self.nick)
-		self.send("NS", "identify " + self.password)
+		self.send("NICK", self.config["nick"])
+		self.nick = self.config["nick"]
+		self.send("USER", self.config["user"], "*", "*", self.config["rname"])
+		self.send("NS", "identify " + self.config["password"])
 
-	def __init__(self, remote, nick, password):
-		host, port = remote.split(":")
-		self.host = host
-		self.port = port
-		self.nick = nick
-		self.password = password
+	def disconnect(self):
+		self.send("QUIT")
+		self.connection = None
+
+	def __init__(self, config):
+		self.config = config
 		self.connection = None
 		self.unseen = []
 		self.lastsend = 0
+		self.running = True
 		self.connect()
+
+	def loop(self):
+		while self.running:
+			cmd = self.read()
+			if cmd[1][0] != '_':
+				hook = Hooks.hooks.get(cmd[1], None)
+				if hook:
+					hook(self, cmd[0], *cmd[2:])
+			
