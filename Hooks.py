@@ -19,7 +19,16 @@ class Request():
 
 def message(serv, source, target, text):
 	host = Irc.get_host(source)
-	if text[0] == '%' or target == serv.nick:
+	if host == "lucas.fido.pw":
+		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
+		if not m:
+			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
+		if m:
+			nick = m.group(1)
+			address = Transactions.deposit_address(Irc.toupper(nick))
+			serv.send("PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
+			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
+	elif text[0] == '%' or target == serv.nick:
 		if serv.is_ignored(host):
 			return
 		t = time.time()
@@ -62,13 +71,4 @@ def message(serv, source, target, text):
 						if not len(ret):
 							ret = "[I have nothing to say]"
 						serv.send("PRIVMSG", reply, src + ": " + ret)
-	elif host == "lucas.fido.pw":
-		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
-		if not m:
-			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
-		if m:
-			nick = m.group(1)
-			address = Transactions.deposit_address(Irc.toupper(nick))
-			serv.send("PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
-			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
 hooks["PRIVMSG"] = message
