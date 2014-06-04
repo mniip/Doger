@@ -166,6 +166,40 @@ def mtip(req, arg):
 		return output
 commands["mtip"] = mtip
 
+def donate(req, arg):
+	"""%donate <amount> - Donates 'amount' coins to the developers of this bot"""
+	if not len(arg):
+		return "%donate <amount>"
+	acct = Irc.toupper(Irc.get_nickname(req.source))
+	with Transactions.get_lock():
+		balance = Transactions.balance(acct)
+		if balance:
+			try:
+				amount = int(arg[0])
+				if amount <= 0:
+					raise ValueError()
+			except ValueError as e:
+				req.serv.send("PRIVMSG", Irc.get_nickname(req.source), repr(arg[1]) + " - invalid amount")
+				return None
+			to = arg[0]
+			if amount > balance:
+				req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You tried to donate %iƉ but you only have %iƉ" % (amount, balance))
+				return None
+			id = Logger.get_id()
+			toacct = "@DONATIONS"
+			Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, balance, toacct, Transactions.balance(toacct)))
+			if Transactions.tip(acct, toacct, amount):
+				Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+				req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "Done [%s]" % (id))
+				return None
+			else:
+				Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+				return "Something went wrong, report this to mniip"
+		else:
+			req.serv.send("PRIVMSG", Irc.get_nickname(req.source), "You don't have any coins on your account")
+			return None
+commands["donate"] = donate
+
 def _help(req, arg):
 	"""%help - list of commands; %help <command> - help for specific command"""
 	if len(arg):
@@ -177,7 +211,7 @@ def _help(req, arg):
 		if cmd:
 			return cmd.__doc__.split("\n")[0]
 	else:
-		return "A fido replacement bot by mniip. Commands: %tip %balance %withdraw %deposit %mtip %help   Try: %help <command>"
+		return "A fido replacement bot by mniip. Commands: %tip %balance %withdraw %deposit %mtip %donate %help   Try: %help <command>"
 commands["help"] = _help
 
 def load(req, arg):
