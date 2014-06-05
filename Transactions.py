@@ -52,6 +52,7 @@ def verify_address(addr):
 
 def renew_wallet():
 	global conn
+	assert(False)
 	i = 0
 	try:
 		while True:

@@ -1,10 +1,10 @@
 import socket, time
 
-import Irc, Hooks
+import Irc, Hooks, Config
 
 class IrcServer:
 	def send(self, *args):
-		print(repr(args))
+		print(self.nick + ": " + Irc.compile(*args))
 		t = self.lastsend - time.time() + 0.25
 		if t > 0:
 			time.sleep(t)
@@ -16,26 +16,24 @@ class IrcServer:
 
 	def read(self):
 		if len(self.unseen):
-			print("Unseen: " + repr(self.unseen[0]))
 			return self.unseen.pop(0)
 		while self.buffer.find('\n') == -1:
 			data = self.connection.recv(4096)
 			self.buffer += data
 		line, self.buffer = self.buffer.split('\n', 1)
-		print(repr(Irc.parse(line.rstrip('\r'))))
 		return Irc.parse(line.rstrip('\r'))
 
 	def connect(self):
-		self.connection = socket.create_connection((self.config["host"], self.config["port"]), None)
+		self.connection = socket.create_connection((Config.config["host"], Config.config["port"]), None)
 		self.connection.settimeout(None)
 		self.buffer = ''
-		self.send("NICK", self.config["nick"])
-		self.nick = self.config["nick"]
-		self.send("USER", self.config["user"], "*", "*", self.config["rname"])
-		self.send("NS", "identify " + self.config["password"])
+		self.send("NICK", self.nick)
+		self.send("USER", Config.config["user"], "*", "*", Config.config["rname"])
+		self.send("NS", "identify " + Config.config["password"])
 
 	def disconnect(self):
 		self.send("QUIT")
+		self.connection.close()
 		self.connection = None
 	
 	def is_ignored(self, host):
@@ -50,10 +48,11 @@ class IrcServer:
 	def ignore(self, host, duration):
 		self.ignored[host] = time.time() + duration
 
-	def __init__(self, config):
-		self.config = config
+	def __init__(self, nick):
 		self.connection = None
 		self.unseen = []
+		self.autojoin = []
+		self.nick = nick
 		self.lastsend = 0
 		self.running = True
 		self.ignored = {}
@@ -69,4 +68,4 @@ class IrcServer:
 					hook(self, cmd[0], *cmd[2:])
 
 	def is_admin(self, hostmask):
-		return self.config["admins"].get(hostmask, False)
+		return Config.config["admins"].get(hostmask, False)

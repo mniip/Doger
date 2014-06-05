@@ -6,7 +6,7 @@ import Irc, Transactions, Commands
 hooks = {}
 
 def end_of_motd(serv, *_):
-	for channel in serv.config["autojoin"]:
+	for channel in serv.autojoin:
 		serv.send("JOIN", channel)
 hooks["376"] = end_of_motd
 
@@ -43,7 +43,9 @@ def message(serv, source, target, text):
 			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
 	elif text[0] == '%' or target == serv.nick:
 		if serv.is_ignored(host):
+			print(serv.nick + ": (ignored) <" + Irc.get_nickname(source) + "> " + text)
 			return
+		print(serv.nick + ": <" + Irc.get_nickname(source) + "> " + text)
 		t = time.time()
 		score = serv.flood_score.get(host, (t, 0))
 		score = max(score[1] + score[0] - t, 0) + 4

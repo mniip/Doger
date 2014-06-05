@@ -224,7 +224,11 @@ commands["exec"] = _exec
 def die(req, arg):
 	"""
 	admin"""
-	req.serv.running = False
+	if arg[0] == "all":
+		with Transactions.get_lock():
+			sys.modules["__main__"].lock.release()
+	elif arg[0] == "thread":
+		req.serv.running = 0
 commands["die"] = die
 
 def ignore(req, arg):
