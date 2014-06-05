@@ -14,29 +14,30 @@ IRC tip bot in python.
 - Create a file in the same folder as the code named `config.py`, and put the following into it:
 
 ```
-    {
-    	"host": "hostname of irc server",
-    	"port": 6667,
-    	"nick": "nickname",
-    	"user": "username",
-    	"rname": "real name",
-    	"password": "Nickserv Password",
-    	"autojoin": ["#channel to join","#another channel to join"],
-    	"admins": {
-    		"nick!username@hostname of admin": True
-    		"more as needed...": True
-    	}
-    }
+config = {
+	"host": "IRC server IP",
+	"port": 6667,
+	"user": "identname",
+	"rname": "realname",
+	"password": "nickservpassword",
+	"admins": {
+		"foo!bar@baz": True # full hostmasks of administrators
+	},
+	"nicks": {
+		"nick1": ["#channel1", "#channel2"],
+		"nick2": ["#channel3"]
+	}
+}
 ```
 
 - Add the following to the dogecoin.conf:
 
 ```
-    rpcthreads=100
-    daemon=1
-    irc=0
-    dnsseed=1
-    paytxfee=1.0
+rpcthreads=100
+daemon=1
+irc=0
+dnsseed=1
+paytxfee=1.0
 ```
     
 **Running it:**
