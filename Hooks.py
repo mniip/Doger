@@ -14,8 +14,21 @@ def ping(serv, *_):
 	serv.send("PONG")
 hooks["PING"] = ping
 
-class Request():
-	pass
+class Request(object):
+	def __init__(self, serv, target, source):
+		self.serv = serv
+		self.target = target
+		self.source = source
+		self.nick = Irc.get_nickname(source)
+
+	def reply(self, text):
+		self.serv.send("PRIVMSG", self.target, self.nick + ": " + text)
+
+	def reply_private(self, text):
+		self.serv.send("PRIVMSG", self.nick, self.nick + ": " + text)
+
+	def say(self, text):
+		self.serv.send("PRIVMSG", self.target, text)
 
 def message(serv, source, target, text):
 	host = Irc.get_host(source)
@@ -56,19 +69,11 @@ def message(serv, source, target, text):
 			cmd = Commands.commands.get(command, None)
 			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or serv.is_admin(source):
 				if cmd:
+					req = Request(serv, reply, source)
 					try:
-						request = Request()
-						request.serv = serv
-						request.reply = reply
-						request.source = source
-						ret = cmd(request, args)
+						ret = cmd(req, args)
 					except Exception as e:
 						type, value, tb = sys.exc_info()
 						traceback.print_tb(tb)
-						ret = repr(e)
-					if isinstance(ret, str):
-						ret = ret.translate(None, "\r\n\a\b\x00")
-						if not len(ret):
-							ret = "[I have nothing to say]"
-						serv.send("PRIVMSG", reply, src + ": " + ret)
+						req.reply(repr(e))
 hooks["PRIVMSG"] = message
