@@ -11,14 +11,14 @@ IRC tip bot in python.
 
 **Setup:**
 
-- Create a file in the same folder as the code named `config.py`, and put the following into it:
+- Create a file in the same folder as the code named `Config.py`, and put the following into it:
 
 ```
 config = {
-	"host": "IRC server IP",
+	"host": "IRC server hostname",
 	"port": 6667,
 	"user": "identname",
-	"rname": "realname",
+	"rname": "Real name",
 	"password": "nickservpassword",
 	"admins": {
 		"foo!bar@baz": True # full hostmasks of administrators

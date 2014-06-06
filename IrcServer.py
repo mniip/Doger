@@ -1,4 +1,4 @@
-import socket, time
+import socket, time, random
 
 import Irc, Hooks, Config
 
@@ -24,7 +24,8 @@ class IrcServer:
 		return Irc.parse(line.rstrip('\r'))
 
 	def connect(self):
-		self.connection = socket.create_connection((Config.config["host"], Config.config["port"]), None)
+		host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
+		self.connection = socket.create_connection((host, Config.config["port"]), None)
 		self.connection.settimeout(None)
 		self.buffer = ''
 		self.send("NICK", self.nick)

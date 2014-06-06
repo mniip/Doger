@@ -1,4 +1,4 @@
 *.pyc
 dogecoind
-config.py
+Config.py
 *.log
