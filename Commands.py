@@ -93,7 +93,7 @@ def tip(req, arg):
 				if Irc.toupper(req.nick) == Irc.toupper(req.target):
 					req.reply("Done [%s]" % (id))
 				else:
-					req.reply("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, id))
+					req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, id))
 				req.serv.send("PRIVMSG", to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, id))
 				return
 			else:
