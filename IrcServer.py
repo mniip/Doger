@@ -21,6 +21,7 @@ class IrcServer:
 			data = self.connection.recv(4096)
 			self.buffer += data
 		line, self.buffer = self.buffer.split('\n', 1)
+		print(line)
 		return Irc.parse(line.rstrip('\r'))
 
 	def connect(self):

@@ -21,14 +21,20 @@ class Request(object):
 		self.source = source
 		self.nick = Irc.get_nickname(source)
 
+	def privmsg(self, targ, text):
+		while len(text) > 350:
+			self.serv.send("PRIVMSG", targ, text[:349])
+			text = text[350:]
+		self.serv.send("PRIVMSG", targ, text)
+
 	def reply(self, text):
-		self.serv.send("PRIVMSG", self.target, self.nick + ": " + text)
+		self.privmsg(self.target, self.nick + ": " + text)
 
 	def reply_private(self, text):
-		self.serv.send("PRIVMSG", self.nick, self.nick + ": " + text)
+		self.privmsg(self.nick, self.nick + ": " + text)
 
 	def say(self, text):
-		self.serv.send("PRIVMSG", self.target, text)
+		self.privmsg(self.target, text)
 
 def message(serv, source, target, text):
 	host = Irc.get_host(source)
