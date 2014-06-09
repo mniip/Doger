@@ -1,6 +1,6 @@
 # coding=utf8
-import sys
-import Irc, Transactions, Logger
+import sys, os
+import Irc, Transactions, Logger, Global
 
 commands = {}
 
@@ -11,7 +11,9 @@ commands["ping"] = ping
 
 def balance(req, _):
 	"""%balance - Displays your confirmed and unconfirmed balance"""
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	confirmed = int(Transactions.balance(acct))
 	full = int(Transactions.balance(acct, 0))
 	if full == confirmed:
@@ -22,7 +24,9 @@ commands["balance"] = balance
 
 def deposit(req, _):
 	"""%deposit - Displays your deposit address"""
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	req.reply("To deposit, send coins to %s (transactions will be credited after 4 confirmations)" % Transactions.deposit_address(acct).encode("utf8"))
 commands["deposit"] = deposit
 
@@ -30,7 +34,9 @@ def withdraw(req, arg):
 	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, send the whole balance"""
 	if len(arg) == 0:
 		return req.reply("%withdraw <address> [amount]")
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.get_lock():
 		balance = int(Transactions.balance(acct))
 		if balance:
@@ -67,7 +73,9 @@ def tip(req, arg):
 	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname"""
 	if len(arg) < 2:
 		return req.reply("%tip <target> <amount>")
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.get_lock():
 		balance = Transactions.balance(acct)
 		if balance:
@@ -79,11 +87,11 @@ def tip(req, arg):
 				req.reply_private(repr(arg[1]) + " - invalid amount")
 				return None
 			to = arg[0]
-			toacct = Irc.toupper(to)
+			toacct = Irc.account(req.serv, to)
+			if not toacct:
+				return req.reply_private(to + " is not online or not identified with freenode services")
 			if toacct[-4:] == "SERV":
 				return req.reply("Services don't accept doge")
-			if not len(to) or not Irc.anyone(req.serv, to):
-				return req.reply_private(to + " is not online")
 			if amount > balance:
 				return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, balance))
 			id = Logger.get_id()
@@ -107,7 +115,9 @@ def mtip(req, arg):
 	"""%mtip <targ1> <amt1> [<targ2> <amt2> ...] - Send multiple tips at once"""
 	if not len(arg) or len(arg) % 2:
 		return req.reply("%mtip <targ1> <amt1> [<targ2> <amt2> ...]")
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.get_lock():
 		balance = Transactions.balance(acct)
 		for i in range(0, len(arg), 2):
@@ -128,7 +138,7 @@ def mtip(req, arg):
 					totip += int(arg[i + 1])
 					found = True
 					break
-			if not found and Irc.anyone(req.serv, arg[i]):
+			if not found:
 				tips[arg[i]] = int(arg[i + 1])
 				totip += int(arg[i + 1])
 		if totip > balance:
@@ -137,16 +147,17 @@ def mtip(req, arg):
 		failed = []
 		for to in tips:
 			amt = tips[to]
-			toacct = Irc.toupper(to)
-			id = Logger.get_id()
-			Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amt, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-			if Transactions.tip(acct, Irc.toupper(to), amt):
-				Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				tipped.append((to, amt, id))
-			else:
-				Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				failed.append((to, amt, id))
-				failed += " %s %d [%s]" % (to, amt, id)
+			toacct = Irc.account(req.serv, to)
+			if toacct:
+				id = Logger.get_id()
+				Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amt, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+				if Transactions.tip(acct, Irc.toupper(to), amt):
+					Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+					tipped.append((to, amt, id))
+				else:
+					Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+					failed.append((to, amt, id))
+					failed += " %s %d [%s]" % (to, amt, id)
 		output = ""
 		if len(tipped):
 			output += "Tipped:"
@@ -163,7 +174,9 @@ def donate(req, arg):
 	"""%donate <amount> - Donates 'amount' coins to the developers of this bot"""
 	if len(arg) < 1:
 		return req.reply("%donate <amount>")
-	acct = Irc.toupper(req.nick)
+	acct = Irc.account(req.serv, req.nick)
+	if not acct:
+		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.get_lock():
 		balance = Transactions.balance(acct)
 		if balance:
@@ -226,7 +239,13 @@ def die(req, arg):
 	admin"""
 	if arg[0] == "all":
 		with Transactions.get_lock():
-			sys.modules["__main__"].lock.release()
+			Global.lock.release()
+	elif arg[0] == "exec":
+		for instance in Global.connections:
+			conn = Global.connections[instance]
+			if conn:
+				conn.disconnect()
+		os.execl(sys.executable, *([sys.executable] + sys.argv))
 	elif arg[0] == "thread":
 		req.serv.running = 0
 commands["die"] = die
