@@ -15,15 +15,16 @@ IRC tip bot in python.
 
 ```
 config = {
-	"host": "IRC server hostname",
+	"host": "ircserverhostna.me",
 	"port": 6667,
 	"user": "identname",
 	"rname": "Real name",
+	"account": "nickservaccountname",
 	"password": "nickservpassword",
 	"admins": {
 		"foo!bar@baz": True # full hostmasks of administrators
 	},
-	"nicks": {
+	"instances": {
 		"nick1": ["#channel1", "#channel2"],
 		"nick2": ["#channel3"]
 	}

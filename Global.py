@@ -1,11 +1,9 @@
-import threading
+import threading, Queue
 
-write_queue = {}
-whois_queue = {}
-reader_running = {}
-writer_running = {}
-flood_score = {}
+instances = {}
+
 ignores = {}
-lastsend = {}
+flood_score = {}
+
 whois_lock = threading.Lock()
-lastwhois = {}
+manager_queue = Queue.Queue()

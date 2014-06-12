@@ -1,4 +1,6 @@
 import socket, errno, time, sys, traceback, threading
 import Global, Config, Irc
 
-Irc.spawn_identity("Doger")
+for instance in Config.config["instances"]:
+	Global.manager_queue.put(("Spawn", instance))
+Irc.manager()
