@@ -22,7 +22,7 @@ config = {
 	"account": "nickservaccountname",
 	"password": "nickservpassword",
 	"admins": {
-		"foo!bar@baz": True # full hostmasks of administrators
+		"unaffiliated/johndoe": True # hosts/cloaks of admins
 	},
 	"instances": {
 		"nick1": ["#channel1", "#channel2"],

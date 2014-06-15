@@ -57,9 +57,13 @@ def message(instance, source, target, text):
 			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
 		if m:
 			nick = m.group(1)
-			address = Transactions.deposit_address(Irc.toupper(nick))
-			serv.send("PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
-			serv.send("PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
+			acct = Irc.account_name(nick)
+			if acct:
+				address = Transactions.deposit_address(acct)
+				Irc.instance_send(instance, "PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
+				Irc.instance_send(instance, "PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
+			else:
+				serv.send("PRIVMSG", nick, "You aren't identified with freenode services (o-O?)")
 	elif text[0] == '%' or target == instance:
 		if Irc.is_ignored(host):
 			print(instance + ": (ignored) <" + Irc.get_nickname(source) + "> " + text)
@@ -85,7 +89,7 @@ def message(instance, source, target, text):
 			args = []
 		else:
 			command, args = text.split(" ", 1)
-			args = args.split(" ")
+			args = [a for a in args.split(" ") if len(a) > 0]
 		if command[0] != '_':
 			cmd = Commands.commands.get(command, None)
 			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or Irc.is_admin(source):
@@ -98,6 +102,10 @@ hooks["PRIVMSG"] = message
 def error(serv, *_):
 	raise socket.error()
 hooks["ERROR"] = error
+
+def whois_host(instance, _, __, target, *___):
+	Global.instances[instance].lastwhois = False
+hooks["311"] = whois_host
 
 def whois_ident(instance, _, __, target, account, ___):
 	Global.instances[instance].lastwhois = account

@@ -9,13 +9,13 @@ def ping(req, _):
 	req.reply("Pong")
 commands["ping"] = ping
 
-def test_m(req, arg):
-	req.reply(repr(Irc.account_name_m(arg)))
-commands["test_m"] = test_m
+def test(req, arg):
+	req.reply(repr(Irc.account_names(arg)))
+commands["test"] = test
 
 def balance(req, _):
 	"""%balance - Displays your confirmed and unconfirmed balance"""
-	acct = Irc.account_name(req.nick)
+	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	confirmed = int(Transactions.balance(acct))
@@ -28,17 +28,17 @@ commands["balance"] = balance
 
 def deposit(req, _):
 	"""%deposit - Displays your deposit address"""
-	acct = Irc.account_name(req.nick)
+	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	req.reply("To deposit, send coins to %s (transactions will be credited after 4 confirmations)" % Transactions.deposit_address(acct).encode("utf8"))
 commands["deposit"] = deposit
 
 def withdraw(req, arg):
-	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, send the whole balance"""
+	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, sends the whole balance"""
 	if len(arg) == 0:
 		return req.reply("%withdraw <address> [amount]")
-	acct = Irc.account_name(req.nick)
+	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.lock:
@@ -55,7 +55,7 @@ def withdraw(req, arg):
 				return None
 		to = arg[0]
 		if amount > balance - 1 or balance == 1:
-			return req.reply_private("You tried to withdraw Ɖ%i (Ɖ+1 fee) but you only have Ɖ%i" % (amount, balance))
+			return req.reply_private("You tried to withdraw Ɖ%i (Ɖ+1 TX fee) but you only have Ɖ%i" % (amount, balance))
 		if not Transactions.verify_address(to):
 			return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
 		id = Logger.get_id()
@@ -73,24 +73,24 @@ def tip(req, arg):
 	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname"""
 	if len(arg) < 2:
 		return req.reply("%tip <target> <amount>")
-	acct = Irc.account_name(req.nick)
+	to = arg[0]
+	acct, toacct = Irc.account_names([req.nick, to])
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	if not toacct:
+		if toacct == None:
+			return req.reply_private(to + " is not online")
+		else:
+			return req.reply_private(to + " is not identified with freenode services")
+	try:
+		amount = int(arg[1])
+		if amount <= 0:
+			raise ValueError()
+	except ValueError as e:
+		req.reply_private(repr(arg[1]) + " - invalid amount")
+		return None
 	with Transactions.lock:
 		balance = Transactions.balance(acct)
-		try:
-			amount = int(arg[1])
-			if amount <= 0:
-				raise ValueError()
-		except ValueError as e:
-			req.reply_private(repr(arg[1]) + " - invalid amount")
-			return None
-		to = arg[0]
-		toacct = Irc.account_name(to)
-		if not toacct:
-			return req.reply_private(to + " is not online or not identified with freenode services")
-		if toacct[-4:] == "SERV":
-			return req.reply("Services don't accept doge")
 		if amount > balance:
 			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, balance))
 		id = Logger.get_id()
@@ -112,58 +112,57 @@ def mtip(req, arg):
 	"""%mtip <targ1> <amt1> [<targ2> <amt2> ...] - Send multiple tips at once"""
 	if not len(arg) or len(arg) % 2:
 		return req.reply("%mtip <targ1> <amt1> [<targ2> <amt2> ...]")
-	acct = Irc.account_name(req.nick)
+	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	for i in range(0, len(arg), 2):
+		try:
+			if int(arg[i + 1]) <= 0:
+				raise ValueError()
+		except ValueError as e:
+			req.reply_private(repr(arg[i + 1]) + " - invalid amount")
+			return None
+	targets = []
+	amounts = []
+	total = 0
+	for i in range(0, len(arg), 2):
+		target = arg[i]
+		amount = int(arg[i + 1])
+		found = False
+		for i in range(len(targets)):
+			if Irc.equal_nicks(targets[i], target):
+				amounts[i] += amount
+				total += amount
+				found = True
+				break
+		if not found:
+			targets.append(target)
+			amounts.append(amount)
+			total += amount
+	accounts = Irc.account_names(targets)
 	with Transactions.lock:
 		balance = Transactions.balance(acct)
-		for i in range(0, len(arg), 2):
-			try:
-				a = int(arg[i + 1])
-				if a <= 0:
-					raise ValueError()
-			except ValueError as e:
-				req.reply_private(repr(arg[i + 1]) + " - invalid amount")
-				return None
-		tips = {}
-		totip = 0
-		for i in range(0, len(arg), 2):
-			found = False
-			for nick in tips:
-				if Irc.equal_nicks(nick, arg[i]):
-					tips[nick] += int(arg[i + 1])
-					totip += int(arg[i + 1])
-					found = True
-					break
-			if not found:
-				tips[arg[i]] = int(arg[i + 1])
-				totip += int(arg[i + 1])
-		if totip > balance:
+		if total > balance:
 			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, balance))
-		tipped = []
-		failed = []
-		for to in tips:
-			amt = tips[to]
-			toacct = Irc.account_name(to)
-			if toacct:
+		tipped = ""
+		failed = ""
+		for i in range(len(targets)):
+			if accounts[i]:
 				id = Logger.get_id()
-				Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amt, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				if Transactions.tip(acct, Irc.nick_upper(to), amt):
-					Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-					tipped.append((to, amt, id))
+				Logger.log(id, "moving %d from acct:%s(%d) to acct:%s(%d)" % (amounts[i], acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
+				if Transactions.tip(acct, accounts[i], amounts[i]):
+					Logger.log(id, "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
+					tipped += " %s %d [%s]" % (targets[i], amounts[i], id)
 				else:
-					Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-					failed.append((to, amt, id))
-					failed += " %s %d [%s]" % (to, amt, id)
-		output = ""
-		if len(tipped):
-			output += "Tipped:"
-			for to, amt, id in tipped:
-				output += " %s %d [%s]" % (to, amt, id)
+					Logger.log(id, "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
+					tipped += " %s %d [%s]" % (targets[i], amounts[i], id)
+			elif accounts[i] == None:
+				failed += " %s (offline)" % (targets[i])
+			else:
+				failed += " %s (unidentified)" % (targets[i])
+		output = "Tipped:" + tipped
 		if len(failed):
-			output += "  Failed:"
-			for to, amt, id in failed:
-				output += " %s %d [%s]" % (to, amt, id)
+			output += "  Failed:" + failed
 		req.reply(output)
 commands["mtip"] = mtip
 
@@ -171,7 +170,7 @@ def donate(req, arg):
 	"""%donate <amount> - Donates 'amount' coins to the developers of this bot"""
 	if len(arg) < 1:
 		return req.reply("%donate <amount>")
-	acct = Irc.account_name(req.nick)
+	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	with Transactions.lock:
@@ -210,7 +209,7 @@ def _help(req, arg):
 	else:
 		if not Irc.equal_nicks(req.target, req.nick):
 			return req.reply("I'm Doger, an IRC dogecoin tipbot. For more info do /msg Doger help")
-		acct = Irc.account_name(req.nick)
+		acct = Irc.account_names([req.nick])[0]
 		if acct:
 			ident = "you're identified as \2" + acct + "\2"
 		else:

@@ -31,49 +31,25 @@ def ignore(host, duration):
 	Global.ignores[host] = time.time() + duration
 
 def is_admin(hostmask):
-	return Config.config["admins"].get(hostmask, False)
+	return Config.config["admins"].get(get_host(hostmask), False)
 
 whois_cache = {}
 
-def account_name(nick):
-	try:
-		(last, account) = whois_cache[nick_upper(nick)]
-		if time.time() < last + 0.1:
-			return account
-	except KeyError:
-		pass
-	q = Queue.Queue()
-	least = None
-	leastsize = float("inf")
-	for instance in Global.instances:
-		qs = Global.instances[instance].whois_queue.unfinished_tasks
-		if leastsize > qs:
-			least = instance
-			leastsize = qs
-	print("least=" + least)
-	with Global.whois_lock:
-		print("sent to " + repr(Global.instances[least].whois_queue))
-		Global.instances[least].whois_queue.put((nick, q))
-		instance_send(least, "WHOIS", nick)
-	account = q.get(True)
-	whois_cache[nick_upper(nick)] = (time.time(), account)
-	return account
-
-def account_name_m(nicks):
+def account_names(nicks):
 	for n in nicks:
 		assert(len(n))
-	qs = [Queue.Queue() for _ in nicks]
-	rs = [None for _ in nicks]
+	queues = [None for _ in nicks]
+	results = [None for _ in nicks]
 	t = time.time()
 	for i in range(len(nicks)):
 		try:
 			(last, account) = whois_cache[nick_upper(nicks[i])]
-			print(last,account)
 			if t < last + 0.1:
-				rs[i] = account
+				results[i] = account
 			else:
 				raise KeyError()
 		except KeyError:
+			queues[i] = Queue.Queue()
 			least = None
 			leastsize = float("inf")
 			for instance in Global.instances:
@@ -81,17 +57,15 @@ def account_name_m(nicks):
 				if leastsize > size:
 					least = instance
 					leastsize = size
-			print("least=" + least)
 			with Global.whois_lock:
-				Global.instances[least].whois_queue.put((nicks[i], qs[i]))
+				Global.instances[least].whois_queue.put((nicks[i], queues[i]))
 				instance_send(least, "WHOIS", nicks[i])
-	print(repr(rs))
 	for i in range(len(nicks)):
-		if not rs[i]:
-			account = qs[i].get(True)
+		if not results[i]:
+			account = queues[i].get(True)
 			whois_cache[nick_upper(nicks[i])] = (time.time(), account)
-			rs[i] = account
-	return rs
+			results[i] = account
+	return results
 
 def parse(cmd):
 	data = cmd.split(" ")
@@ -128,6 +102,7 @@ class Instance(object):
 		self.reader_dead = threading.Event()
 		self.writer_dying = threading.Event()
 		self.writer_dead = threading.Event()
+		self.error_lock = threading.Lock()
 
 def reader_thread(instance, sock):
 	print(instance + " reader started")
@@ -143,9 +118,10 @@ def reader_thread(instance, sock):
 		except socket.timeout:
 			pass
 		except socket.error as e:
-			print(instance + " reader failed: " + repr(e))
-			Global.manager_queue.put(("Reconnect", instance))
-			Global.instances[instance].reader_dying.wait()
+			if Global.instances[instance].error_lock.acquire(False):
+				print(instance + " reader failed: " + repr(e))
+				Global.manager_queue.put(("Reconnect", instance))
+				Global.instances[instance].reader_dying.wait()
 			break
 		except Exception as e:
 			type, value, tb = sys.exc_info()
@@ -160,10 +136,9 @@ def reader_thread(instance, sock):
 		pass
 	Global.instances[instance].reader_dead.set()
 
-throttle_exempt = {"WHOIS": 0.5}
 
 def throttle_output(instance, command):
-	t = Global.instances[instance].lastsend - time.time() + throttle_exempt.get(command, 0.25)
+	t = Global.instances[instance].lastsend - time.time() + 0.5
 	if t > 0:
 		time.sleep(t)
 	Global.instances[instance].lastsend = time.time()
@@ -181,9 +156,10 @@ def writer_thread(instance, sock):
 			pass
 		except socket.error as e:
 			q.task_done()
-			print(instance + " writer failed: " + repr(e))
-			Global.manager_queue.put(("Reconnect", instance))
-			Global.instances[instance].writer_dying.wait()
+			if Global.instances[instance].error_lock.acquire(False):
+				print(instance + " writer failed: " + repr(e))
+				Global.manager_queue.put(("Reconnect", instance))
+				Global.instances[instance].writer_dying.wait()
 			break
 		except Exception as e:
 			q.task_done()
@@ -257,6 +233,10 @@ def manager():
 				Global.instances[cmd[1]].writer_dying.set()
 				Global.instances[cmd[1]].reader_dead.wait()
 				Global.instances[cmd[1]].writer_dead.wait()
+				try:
+					Global.instances[cmd[1]].error_lock.release()
+				except threading.ThreadError:
+					pass
 				try:
 					while True:
 						Global.instances[cmd[1]].send_queue.get(False)
