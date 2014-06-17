@@ -53,7 +53,7 @@ def account_names(nicks):
 			least = None
 			leastsize = float("inf")
 			for instance in Global.instances:
-				size = Global.instances[instance].whois_queue.unfinished_tasks
+				size = Global.instances[instance].whois_queue.unfinished_tasks + Global.instances[instance].send_queue.unfinished_tasks
 				if leastsize > size:
 					least = instance
 					leastsize = size
@@ -152,6 +152,7 @@ def writer_thread(instance, sock):
 			print(instance + ": " + repr(data))
 			throttle_output(instance, data[0])
 			sock.sendall(compile(*data) + "\n")
+			q.task_done()
 		except Queue.Empty:
 			pass
 		except socket.error as e:

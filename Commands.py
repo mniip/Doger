@@ -1,6 +1,6 @@
 # coding=utf8
 import sys, os, time
-import Irc, Transactions, Logger, Global
+import Irc, Transactions, Logger, Global, Hooks
 
 commands = {}
 
@@ -252,3 +252,24 @@ def die(req, arg):
 	else:
 		Global.manager_queue.put(("Die",))
 commands["die"] = die
+
+def _as(req, arg):
+	"""
+	admin"""
+	_, target, text = req.text.split(" ", 2)
+	if target[0] == '@':
+		Irc.whois_cache["@"] = (time.time(), target[1:])
+		target = "@"
+	if text.find(" ") == -1:
+		command = text
+		args = []
+	else:
+		command, args = text.split(" ", 1)
+		args = [a for a in args.split(" ") if len(a) > 0]
+	if command[0] != '_':
+		cmd = commands.get(command.lower(), None)
+		if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or Irc.is_admin(source):
+			if cmd:
+				req = Hooks.FakeRequest(req, target, text)
+				Hooks.run_command(cmd, req, args)
+commands["as"] = _as

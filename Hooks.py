@@ -38,6 +38,30 @@ class Request(object):
 	def say(self, text):
 		self.privmsg(self.target, text)
 
+class FakeRequest(Request):
+	def __init__(self, req, target, text):
+		self.instance = req.instance
+		self.target = req.target
+		self.source = req.source
+		self.nick = target
+		self.text = text
+		self.realnick = req.nick
+
+	def privmsg(self, targ, text):
+		while len(text) > 350:
+			Irc.instance_send(self.instance, "PRIVMSG", targ, text[:349])
+			text = text[350:]
+		Irc.instance_send(self.instance, "PRIVMSG", targ, text)
+
+	def reply(self, text):
+		self.privmsg(self.target, self.realnick + " [reply] : " + text)
+
+	def reply_private(self, text):
+		self.privmsg(self.target, self.realnick + " [reply_private]: " + text)
+
+	def say(self, text):
+		self.privmsg(self.target, text)
+
 def run_command(cmd, req, arg):
 	try:
 		cmd(req, arg)
@@ -57,7 +81,7 @@ def message(instance, source, target, text):
 			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
 		if m:
 			nick = m.group(1)
-			acct = Irc.account_name(nick)
+			acct = Irc.account_names([nick])[0]
 			if acct:
 				address = Transactions.deposit_address(acct)
 				Irc.instance_send(instance, "PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
@@ -91,7 +115,7 @@ def message(instance, source, target, text):
 			command, args = text.split(" ", 1)
 			args = [a for a in args.split(" ") if len(a) > 0]
 		if command[0] != '_':
-			cmd = Commands.commands.get(command, None)
+			cmd = Commands.commands.get(command.lower(), None)
 			if not cmd.__doc__ or cmd.__doc__.find("admin") == -1 or Irc.is_admin(source):
 				if cmd:
 					req = Request(instance, reply, source, text)
