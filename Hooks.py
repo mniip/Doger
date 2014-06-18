@@ -1,5 +1,5 @@
 # coding=utf8
-import traceback, sys, re, time, threading, Queue, socket
+import traceback, sys, re, time, threading, Queue, socket, subprocess
 
 import Irc, Config, Transactions, Commands, Config, Global
 
@@ -88,6 +88,16 @@ def message(instance, source, target, text):
 				Irc.instance_send(instance, "PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
 			else:
 				serv.send("PRIVMSG", nick, "You aren't identified with freenode services (o-O?)")
+	elif text == "\x01VERSION\x01":
+		p = subprocess.Popen(["git", "rev-parse", "HEAD"], stdout = subprocess.PIPE)
+		hash, _ = p.communicate()
+		hash = hash.strip()
+		p = subprocess.Popen(["git", "diff", "--quiet"])
+		changes = p.wait()
+		if changes:
+			hash += "[+]"
+		version = "Doger by mniip, version " + hash
+		Irc.instance_send(instance, "NOTICE", Irc.get_nickname(source), "\x01VERSION " + version + "\x01")
 	elif text[0] == '%' or target == instance:
 		if Irc.is_ignored(host):
 			print(instance + ": (ignored) <" + Irc.get_nickname(source) + "> " + text)
