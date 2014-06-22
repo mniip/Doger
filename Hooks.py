@@ -107,9 +107,10 @@ def message(instance, source, target, text):
 		score = Global.flood_score.get(host, (t, 0))
 		score = max(score[1] + score[0] - t, 0) + 10
 		if score > 80 and not Irc.is_admin(source):
-			Irc.ignore(host, 240)
-			Irc.instance_send(instance, "PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds")
-			return
+			pass
+			#Irc.ignore(host, 240)
+			#Irc.instance_send(instance, "PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds")
+			#return
 		Global.flood_score[host] = (t, score)
 		if text[0] == '%':
 			text = text[1:]
@@ -132,6 +133,59 @@ def message(instance, source, target, text):
 					t = threading.Thread(target = run_command, args = (cmd, req, args))
 					t.start()
 hooks["PRIVMSG"] = message
+
+def join(instance, source, channel, account, _):
+	if account == "*":
+		account = False
+	nick = Irc.get_nickname(source)
+	if nick  == instance:
+		Global.account_cache[channel] = {}
+	Global.account_cache[channel][nick] = account
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			Global.account_cache[channel][nick] = account
+hooks["JOIN"] = join
+
+def part(instance, source, channel):
+	nick = Irc.get_nickname(source)
+	if nick == instance:
+		del Global.account_cache[channel]
+		return
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			del Global.account_cache[channel][nick]
+hooks["PART"] = part
+
+def quit(instance, source, channel):
+	nick = Irc.get_nickname(source)
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			del Global.account_cache[channel][nick]
+hooks["QUIT"] = quit
+
+def account(instance, source, account):
+	if account == "*":
+		account = False
+	nick = Irc.get_nickname(source)
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			Global.account_cache[channel][nick] = account
+hooks["ACCOUNT"] = account
+
+def _nick(instance, source, newnick):
+	nick = Irc.get_nickname(source)
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			Global.account_cache[channel][newnick] = Global.account_cache[channel][nick]
+			del Global.account_cache[channel][nick]
+hooks["NICK"] = _nick
+
+def names(instance, _, __, eq, channel, names):
+	names = names.split(" ")
+	for n in names:
+		n = Irc.strip_nickname(n)
+		Global.account_cache[channel][n] = None
+hooks["353"] = names
 
 def error(serv, *_):
 	raise socket.error()

@@ -9,6 +9,9 @@ ircupper = maketrans(
 def get_nickname(hostmask):
 	return hostmask.split("!", 1)[0]
 
+def strip_nickname(name):
+	return name.lstrip("+@")
+
 def get_host(hostmask):
 	return hostmask.split("@", 1)[1]
 
@@ -33,8 +36,6 @@ def ignore(host, duration):
 def is_admin(hostmask):
 	return Config.config["admins"].get(get_host(hostmask), False)
 
-whois_cache = {}
-
 def account_names(nicks):
 	for n in nicks:
 		assert(len(n))
@@ -42,13 +43,13 @@ def account_names(nicks):
 	results = [None for _ in nicks]
 	t = time.time()
 	for i in range(len(nicks)):
-		try:
-			(last, account) = whois_cache[nick_upper(nicks[i])]
-			if t < last + 0.1:
-				results[i] = account
-			else:
-				raise KeyError()
-		except KeyError:
+		found = False
+		for channel in Global.account_cache:
+			for nick in Global.account_cache[channel]:
+				if Global.account_cache[channel][nick] != None and equal_nicks(nick, nicks[i]):
+					results[i] = Global.account_cache[channel][nick]
+					found = True
+		if not found:
 			queues[i] = Queue.Queue()
 			least = None
 			leastsize = float("inf")
@@ -61,9 +62,12 @@ def account_names(nicks):
 				Global.instances[least].whois_queue.put((nicks[i], queues[i]))
 				instance_send(least, "WHOIS", nicks[i])
 	for i in range(len(nicks)):
-		if not results[i]:
+		if results[i] == None:
 			account = queues[i].get(True)
-			whois_cache[nick_upper(nicks[i])] = (time.time(), account)
+			for channel in Global.account_cache:
+				for nick in Global.account_cache[channel]:
+					if equal_nicks(nick, nicks[i]):
+						Global.account_cache[channel][nick] = account
 			results[i] = account
 	return results
 
@@ -97,7 +101,7 @@ class Instance(object):
 		self.send_queue = Queue.Queue()
 		self.whois_lock = threading.Lock()
 		self.whois_queue = Queue.Queue()
-		self.lastsend = 0
+		self.lastsend = time.time()
 		self.reader_dying = threading.Event()
 		self.reader_dead = threading.Event()
 		self.writer_dying = threading.Event()
@@ -147,6 +151,8 @@ def writer_thread(instance, sock):
 	print(instance + " writer started")
 	while not Global.instances[instance].writer_dying.is_set():
 		try:
+			if Global.instances[instance].lastsend + 300 < time.time():
+				raise socket.error()
 			q = Global.instances[instance].send_queue
 			data = q.get(True, 0.05)
 			print(instance + ": " + repr(data))
@@ -193,12 +199,13 @@ def connect_instance(instance):
 	Global.instances[instance].reader_dead.clear()
 	Global.instances[instance].writer_dying.clear()
 	Global.instances[instance].writer_dead.clear()
-	Global.instances[instance].lastsend = 0
+	Global.instances[instance].lastsend = time.time()
 	writer.start()
 	reader.start()
 	instance_send_nolock(instance, "NICK", instance)
 	instance_send_nolock(instance, "USER", Config.config["user"], "*", "*", Config.config["rname"])
 	instance_send_nolock(instance, "NS", "identify " + Config.config["account"] + " " + Config.config["password"])
+	instance_send_nolock(instance, "CAP", "REQ", "extended-join account-notify")
 
 def manager():
 	while True:
@@ -227,6 +234,12 @@ def manager():
 						Global.instances[cmd[1]].whois_queue.task_done()
 				except Queue.Empty:
 					pass
+				chans = []
+				for channel in Global.account_cache:
+					if cmd[1] in Global.account_cache[channel]:
+						chans.append(channel)
+				for channel in chans:
+					del Global.account_cache[channel]
 				connect_instance(cmd[1])
 			elif cmd[0] == "Disconnect":
 				Global.instances[cmd[1]].send_lock.acquire()
@@ -249,13 +262,19 @@ def manager():
 						Global.instances[cmd[1]].whois_queue.task_done()
 				except Queue.Empty:
 					pass
+				chans = []
+				for channel in Global.account_cache:
+					if cmd[1] in Global.account_cache[channel]:
+						chans.append(channel)
+				for channel in chans:
+					del Global.account_cache[channel]
 				del Global.instances[cmd[1]]
 			elif cmd[0] == "Die":
 				return
 		except Exception as e:
 			type, value, tb = sys.exc_info()
-			print(instance + " manager ===============")
+			print("manager ===============")
 			traceback.print_tb(tb)
 			print(repr(e))
-			print(instance + " manager ===============")
+			print("manager ===============")
 		Global.manager_queue.task_done()
