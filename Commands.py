@@ -258,7 +258,7 @@ def _as(req, arg):
 	admin"""
 	_, target, text = req.text.split(" ", 2)
 	if target[0] == '@':
-		Irc.whois_cache["@"] = (time.time(), target[1:])
+		Global.account_cache[""] = {"@": target[1:]}
 		target = "@"
 	if text.find(" ") == -1:
 		command = text

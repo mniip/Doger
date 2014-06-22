@@ -156,6 +156,15 @@ def part(instance, source, channel):
 			del Global.account_cache[channel][nick]
 hooks["PART"] = part
 
+def kick(instance, _, channel, nick, *__):
+	if nick == instance:
+		del Global.account_cache[channel]
+		return
+	for channel in Global.account_cache:
+		if nick in Global.account_cache[channel]:
+			del Global.account_cache[channel][nick]
+hooks["KICK"] = kick
+
 def quit(instance, source, channel):
 	nick = Irc.get_nickname(source)
 	for channel in Global.account_cache:
