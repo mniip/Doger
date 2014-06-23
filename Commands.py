@@ -204,7 +204,7 @@ def _help(req, arg):
 		else:
 			name = arg[0]
 		cmd = commands.get(name, None)
-		if cmd:
+		if cmd and cmd.__doc__:
 			req.reply(cmd.__doc__.split("\n")[0])
 	else:
 		if not Irc.equal_nicks(req.target, req.nick):

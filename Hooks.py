@@ -221,3 +221,19 @@ def whois_end(instance, _, __, target, ___):
 	except Queue.Empty:
 		print(instance + ": WHOIS reply but nothing queued")
 hooks["318"] = whois_end
+
+def cap(instance, _, __, ___, caps):
+	if caps.rstrip(" ") == "sasl":
+		Irc.instance_send_nolock(instance, "AUTHENTICATE", "PLAIN")
+hooks["CAP"] = cap
+
+def authenticate(instance, _, data):
+	if data == "+":
+		load = Config.config["account"] + "\0" + Config.config["account"] + "\0" + Config.config["password"]
+		Irc.instance_send_nolock(instance, "AUTHENTICATE", load.encode("base64").rstrip("\n"))
+hooks["AUTHENTICATE"] = authenticate
+
+def sasl_success(instance, _, data, __):
+	Irc.instance_send_nolock(instance, "CAP", "END")
+	Irc.instance_send_nolock(instance, "CAP", "REQ", "extended-join account-notify")
+hooks["903"] = sasl_success

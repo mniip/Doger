@@ -202,10 +202,9 @@ def connect_instance(instance):
 	Global.instances[instance].lastsend = time.time()
 	writer.start()
 	reader.start()
+	instance_send_nolock(instance, "CAP", "REQ", "sasl")
 	instance_send_nolock(instance, "NICK", instance)
 	instance_send_nolock(instance, "USER", Config.config["user"], "*", "*", Config.config["rname"])
-	instance_send_nolock(instance, "NS", "identify " + Config.config["account"] + " " + Config.config["password"])
-	instance_send_nolock(instance, "CAP", "REQ", "extended-join account-notify")
 
 def manager():
 	while True:
