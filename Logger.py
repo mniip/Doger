@@ -1,20 +1,34 @@
 import time, md5
 
-logfile = "Doger.log"
+logfile = "logs/Doger.log"
 
-def log(id, text):
+def log(spec, text):
+# Error Raw Connection Tx Whois Manager
+	template = "erctwm"
+	specifier = ""
+	for c in template:
+		specifier += c if c in spec else "_"
 	with open(logfile, "a") as f:
-		if id:
-			f.write(str(id) + "\t" + str(text) + "\n")
-		else:
-			f.write("\t" + str(text) + "\n")
+		t = time.time()
+		for line in text.split("\n"):
+			f.write("[%s] [%f] <%s> %s\n" % (time.ctime(t), t, specifier, line))
 
-def get_id():
+class Token():
+	def __init__(self, id):
+		self.id = id
+
+	def __enter__(self):
+		log("t", "[%s] Created" % (self.id))
+		return self
+
+	def __exit__(self, _, __, ___):
+		log("t", "[%s] Destroyed" % (self.id))
+
+	def log(self, spec, text):
+		log(spec, "[%s] %s" % (self.id, text))
+
+def token():
 	m = md5.new()
 	t = time.time()
 	m.update(str(t))
-	id = m.hexdigest()[:8]
-	log(id, "Created at %f" % (t))
-	return id
-
-
+	return Token(m.hexdigest()[:8])

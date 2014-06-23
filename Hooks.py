@@ -1,12 +1,13 @@
 # coding=utf8
 import traceback, sys, re, time, threading, Queue, socket, subprocess
 
-import Irc, Config, Transactions, Commands, Config, Global
+import Irc, Config, Transactions, Commands, Config, Global, Logger
 
 hooks = {}
 
 def end_of_motd(instance, *_):
-	Global.instances[instance].send_lock.release()
+	Global.instances[instance].can_send.set()
+	Logger.log("c", instance + ": End of motd, joining " + " ".join(Config.config["instances"][instance]))
 	for channel in Config.config["instances"][instance]:
 		Irc.instance_send(instance, "JOIN", channel)
 hooks["376"] = end_of_motd
@@ -24,6 +25,7 @@ class Request(object):
 		self.text = text
 
 	def privmsg(self, targ, text):
+		Logger.log("c", self.instance + ": %s <- %s " % (targ, text))
 		while len(text) > 350:
 			Irc.instance_send(self.instance, "PRIVMSG", targ, text[:349])
 			text = text[350:]
@@ -48,6 +50,7 @@ class FakeRequest(Request):
 		self.realnick = req.nick
 
 	def privmsg(self, targ, text):
+		Logger.log("c", self.instance + ": %s <- %s " % (targ, text))
 		while len(text) > 350:
 			Irc.instance_send(self.instance, "PRIVMSG", targ, text[:349])
 			text = text[350:]
@@ -68,14 +71,14 @@ def run_command(cmd, req, arg):
 	except Exception as e:
 		req.reply(repr(e))
 		type, value, tb = sys.exc_info()
-		print(req.instance + " " + req.text + " ===============")
-		traceback.print_tb(tb)
-		print(repr(e))
-		print(req.instance + " " + req.text + " ===============")
+		Logger.log("ce", "ERROR in " + req.instance + " : " + req.text)
+		Logger.log("ce", repr(e))
+		Logger.log("ce", "".join(traceback.format_tb(tb)))
 
 def message(instance, source, target, text):
 	host = Irc.get_host(source)
 	if host == "lucas.fido.pw":
+		Logger.log("c", instance + ": %s <%s> %s " % (target, Irc.get_nickname(source), text))
 		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
 		if not m:
 			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
@@ -87,7 +90,7 @@ def message(instance, source, target, text):
 				Irc.instance_send(instance, "PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
 				Irc.instance_send(instance, "PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
 			else:
-				serv.send("PRIVMSG", nick, "You aren't identified with freenode services (o-O?)")
+				Irc.instance_send(instance, "PRIVMSG", nick, "You aren't identified with freenode services (o-O?)")
 	elif text == "\x01VERSION\x01":
 		p = subprocess.Popen(["git", "rev-parse", "HEAD"], stdout = subprocess.PIPE)
 		hash, _ = p.communicate()
@@ -100,14 +103,14 @@ def message(instance, source, target, text):
 		Irc.instance_send(instance, "NOTICE", Irc.get_nickname(source), "\x01VERSION " + version + "\x01")
 	elif text[0] == '%' or target == instance:
 		if Irc.is_ignored(host):
-			print(instance + ": (ignored) <" + Irc.get_nickname(source) + "> " + text)
+			Logger.log("c", instance + ": %s <%s ignored> %s " % (target, Irc.get_nickname(source), text))
 			return
-		print(instance + ": <" + Irc.get_nickname(source) + "> " + text)
+		Logger.log("c", instance + ": %s <%s> %s " % (target, Irc.get_nickname(source), text))
 		t = time.time()
 		score = Global.flood_score.get(host, (t, 0))
 		score = max(score[1] + score[0] - t, 0) + 10
 		if score > 80 and not Irc.is_admin(source):
-			pass
+			Logger.log("c", instance + ": Ignoring " + source)
 			#Irc.ignore(host, 240)
 			#Irc.instance_send(instance, "PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds")
 			#return
@@ -144,25 +147,28 @@ def join(instance, source, channel, account, _):
 	for channel in Global.account_cache:
 		if nick in Global.account_cache[channel]:
 			Global.account_cache[channel][nick] = account
+			Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
 hooks["JOIN"] = join
 
-def part(instance, source, channel):
+def part(instance, source, channel, *_):
 	nick = Irc.get_nickname(source)
 	if nick == instance:
 		del Global.account_cache[channel]
+		Logger.log("w", "Removing cache for " + channel)
 		return
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			del Global.account_cache[channel][nick]
+	if nick in Global.account_cache[channel]:
+		del Global.account_cache[channel][nick]
+		Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["PART"] = part
 
 def kick(instance, _, channel, nick, *__):
 	if nick == instance:
 		del Global.account_cache[channel]
+		Logger.log("w", "Removing cache for " + channel)
 		return
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			del Global.account_cache[channel][nick]
+	if nick in Global.account_cache[channel]:
+		del Global.account_cache[channel][nick]
+		Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["KICK"] = kick
 
 def quit(instance, source, channel):
@@ -170,6 +176,7 @@ def quit(instance, source, channel):
 	for channel in Global.account_cache:
 		if nick in Global.account_cache[channel]:
 			del Global.account_cache[channel][nick]
+			Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["QUIT"] = quit
 
 def account(instance, source, account):
@@ -179,6 +186,7 @@ def account(instance, source, account):
 	for channel in Global.account_cache:
 		if nick in Global.account_cache[channel]:
 			Global.account_cache[channel][nick] = account
+			Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
 hooks["ACCOUNT"] = account
 
 def _nick(instance, source, newnick):
@@ -186,6 +194,7 @@ def _nick(instance, source, newnick):
 	for channel in Global.account_cache:
 		if nick in Global.account_cache[channel]:
 			Global.account_cache[channel][newnick] = Global.account_cache[channel][nick]
+			Logger.log("w", "%s -> %s in %s" % (nick, newnick, channel))
 			del Global.account_cache[channel][nick]
 hooks["NICK"] = _nick
 
@@ -196,7 +205,8 @@ def names(instance, _, __, eq, channel, names):
 		Global.account_cache[channel][n] = None
 hooks["353"] = names
 
-def error(serv, *_):
+def error(instance, *_):
+	Logger.log("ce", instance + " disconnected")
 	raise socket.error()
 hooks["ERROR"] = error
 
@@ -212,14 +222,15 @@ def whois_end(instance, _, __, target, ___):
 	try:
 		nick, q = Global.instances[instance].whois_queue.get(False)
 		if Irc.equal_nicks(target, nick):
+			Logger.log("w", instance + ": WHOIS of " + target + " is " + Global.instances[instance].lastwhois)
 			q.put(Global.instances[instance].lastwhois, True)
 		else:
-			print(instance + ": WHOIS reply for " + target + " but queued " + nick + " returning None")
+			Logger.log("we", instance + ": WHOIS reply for " + target + " but queued " + nick + " returning None")
 			q.put(None, True)
 		Global.instances[instance].lastwhois = None
 		Global.instances[instance].whois_queue.task_done()
 	except Queue.Empty:
-		print(instance + ": WHOIS reply but nothing queued")
+		Logger.log("we", instance + ": WHOIS reply for " + target + " but nothing queued")
 hooks["318"] = whois_end
 
 def cap(instance, _, __, ___, caps):
@@ -234,6 +245,7 @@ def authenticate(instance, _, data):
 hooks["AUTHENTICATE"] = authenticate
 
 def sasl_success(instance, _, data, __):
+	Logger.log("c", "Finished authentication")
 	Irc.instance_send_nolock(instance, "CAP", "END")
 	Irc.instance_send_nolock(instance, "CAP", "REQ", "extended-join account-notify")
 hooks["903"] = sasl_success

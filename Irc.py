@@ -1,6 +1,6 @@
 import socket, random, threading, Queue, sys, traceback, time
 from string import maketrans
-import Config, Global, Hooks
+import Config, Global, Hooks, Logger
 
 ircupper = maketrans(
 	"abcdefghijklmnopqrstuvwxyz[]~\\",
@@ -41,14 +41,18 @@ def account_names(nicks):
 		assert(len(n))
 	queues = [None for _ in nicks]
 	results = [None for _ in nicks]
-	t = time.time()
+	Logger.log("w", "Task: " + " ".join(nicks))
 	for i in range(len(nicks)):
 		found = False
 		for channel in Global.account_cache:
 			for nick in Global.account_cache[channel]:
 				if Global.account_cache[channel][nick] != None and equal_nicks(nick, nicks[i]):
 					results[i] = Global.account_cache[channel][nick]
+					Logger.log("w", "Found %s in cache for %s : %s=%s" % (nicks[i], channel, nick, repr(results[i])))
 					found = True
+					break
+			if found:
+				break
 		if not found:
 			queues[i] = Queue.Queue()
 			least = None
@@ -58,6 +62,7 @@ def account_names(nicks):
 				if leastsize > size:
 					least = instance
 					leastsize = size
+			Logger.log("w", "Smallest instance for whois is " + least)
 			with Global.whois_lock:
 				Global.instances[least].whois_queue.put((nicks[i], queues[i]))
 				instance_send(least, "WHOIS", nicks[i])
@@ -68,7 +73,9 @@ def account_names(nicks):
 				for nick in Global.account_cache[channel]:
 					if equal_nicks(nick, nicks[i]):
 						Global.account_cache[channel][nick] = account
+						Logger.log("w", "Propagating %s=%s into %s" % (nicks[i], repr(account), channel))
 			results[i] = account
+	Logger.log("w", "Solution: " + " ".join([repr(x) for x in results]))
 	return results
 
 def parse(cmd):
@@ -97,7 +104,7 @@ def handle_input(instance, line):
 
 class Instance(object):
 	def __init__(self, instance):
-		self.send_lock = threading.Lock()
+		self.can_send = threading.Event()
 		self.send_queue = Queue.Queue()
 		self.whois_lock = threading.Lock()
 		self.whois_queue = Queue.Queue()
@@ -109,87 +116,99 @@ class Instance(object):
 		self.error_lock = threading.Lock()
 
 def reader_thread(instance, sock):
-	print(instance + " reader started")
+	Logger.log("c", instance + ": Reader started")
 	buffer = ""
 	while not Global.instances[instance].reader_dying.is_set():
 		try:
 			while buffer.find("\n") != -1:
 				line, buffer = buffer.split("\n", 1)
 				line = line.rstrip("\r")
-				print(instance + ": " + line)
+				Logger.log("r", instance + ": > " + line)
 				handle_input(instance, line)
 			buffer += sock.recv(4096)
 		except socket.timeout:
 			pass
 		except socket.error as e:
+			Logger.log("ce", instance + ": Reader failed")
 			if Global.instances[instance].error_lock.acquire(False):
-				print(instance + " reader failed: " + repr(e))
+				type, value, tb = sys.exc_info()
+				Logger.log("ce", "SOCKET ERROR in " + instance + " reader")
+				Logger.log("ce", repr(e))
+				Logger.log("ce", "".join(traceback.format_tb(tb)))
 				Global.manager_queue.put(("Reconnect", instance))
 				Global.instances[instance].reader_dying.wait()
+			else:
+				Logger.log("c", instance + ": Reader superfluous error")
 			break
 		except Exception as e:
 			type, value, tb = sys.exc_info()
-			print(instance + " reader ===============")
-			traceback.print_tb(tb)
-			print(repr(e))
-			print(instance + " reader ===============")
-	print(instance + " reader exited")
+			Logger.log("ce", "ERROR in " + instance + " reader")
+			Logger.log("ce", repr(e))
+			Logger.log("ce", "".join(traceback.format_tb(tb)))
 	try:
 		sock.close()
 	except socket.error:
 		pass
 	Global.instances[instance].reader_dead.set()
+	Logger.log("c", instance + ": Reader exited")
 
 
-def throttle_output(instance, command):
+def throttle_output(instance):
 	t = Global.instances[instance].lastsend - time.time() + 0.5
 	if t > 0:
 		time.sleep(t)
 	Global.instances[instance].lastsend = time.time()
 
 def writer_thread(instance, sock):
-	print(instance + " writer started")
+	Logger.log("c", instance + ": Writer started")
 	while not Global.instances[instance].writer_dying.is_set():
 		try:
 			if Global.instances[instance].lastsend + 300 < time.time():
-				raise socket.error()
+				raise socket.error("Timeout")
 			q = Global.instances[instance].send_queue
-			data = q.get(True, 0.05)
-			print(instance + ": " + repr(data))
-			throttle_output(instance, data[0])
-			sock.sendall(compile(*data) + "\n")
+			data = q.get(True, 0.5)
+			throttle_output(instance)
+			line = compile(*data)
+			Logger.log("r", instance + ": < " + line)
+			sock.sendall(line + "\n")
 			q.task_done()
 		except Queue.Empty:
 			pass
 		except socket.error as e:
 			q.task_done()
+			Logger.log("ce", instance + ": Writer failed")
 			if Global.instances[instance].error_lock.acquire(False):
-				print(instance + " writer failed: " + repr(e))
+				type, value, tb = sys.exc_info()
+				Logger.log("ce", "SOCKET ERROR in " + instance + " writer")
+				Logger.log("ce", repr(e))
+				Logger.log("ce", "".join(traceback.format_tb(tb)))
 				Global.manager_queue.put(("Reconnect", instance))
 				Global.instances[instance].writer_dying.wait()
+			else:
+				Logger.log("c", instance + ": Writer superfluous error")
 			break
 		except Exception as e:
 			q.task_done()
 			type, value, tb = sys.exc_info()
-			print(instance + " writer ===============")
-			traceback.print_tb(tb)
-			print(repr(e))
-			print(instance + " writer ===============")
-	print(instance + " writer exited")
+			Logger.log("ce", "ERROR in " + instance + " writer")
+			Logger.log("ce", repr(e))
+			Logger.log("ce", "".join(traceback.format_tb(tb)))
 	try:
 		sock.close()
 	except socket.error:
 		pass
 	Global.instances[instance].writer_dead.set()
+	Logger.log("c", instance + ": Writer exited")
 
 def instance_send(instance, *args):
-	with Global.instances[instance].send_lock:
-		Global.instances[instance].send_queue.put(args)
+	Global.instances[instance].can_send.wait()
+	Global.instances[instance].send_queue.put(args)
 
 def instance_send_nolock(instance, *args):
 	Global.instances[instance].send_queue.put(args)
 
 def connect_instance(instance):
+	Logger.log("c", instance + ": Connecting")
 	host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
 	sock = socket.create_connection((host, Config.config["port"]), None)
 	sock.settimeout(0.05)
@@ -202,6 +221,7 @@ def connect_instance(instance):
 	Global.instances[instance].lastsend = time.time()
 	writer.start()
 	reader.start()
+	Logger.log("c", instance + ": Initiating authentication")
 	instance_send_nolock(instance, "CAP", "REQ", "sasl")
 	instance_send_nolock(instance, "NICK", instance)
 	instance_send_nolock(instance, "USER", Config.config["user"], "*", "*", Config.config["rname"])
@@ -210,23 +230,27 @@ def manager():
 	while True:
 		try:
 			cmd = Global.manager_queue.get(True)
-			print(repr(cmd))
+			Logger.log("m", "Got " + repr(cmd))
 			if cmd[0] == "Spawn":
 				i = Instance(cmd[1])
-				i.send_lock.acquire()
+				i.can_send.clear()
 				Global.instances[cmd[1]] = i
 				connect_instance(cmd[1])
-			elif cmd[0] == "Reconnect":
-				Global.instances[cmd[1]].send_lock.acquire()
+			elif cmd[0] == "Reconnect" or cmd[0] == "Disconnect":
+				Global.instances[cmd[1]].can_send.clear()
 				Global.instances[cmd[1]].reader_dying.set()
 				Global.instances[cmd[1]].writer_dying.set()
+				Logger.log("m", "Waiting for reader")
 				Global.instances[cmd[1]].reader_dead.wait()
+				Logger.log("m", "Waiting for writer")
 				Global.instances[cmd[1]].writer_dead.wait()
+				Logger.log("m", "Emptying send queue")
 				try:
 					while True:
 						Global.instances[cmd[1]].send_queue.get(False)
 				except Queue.Empty:
 					pass
+				Logger.log("mw", "Emptying whois queue")
 				try:
 					while True:
 						Global.instances[cmd[1]].whois_queue.get(False)[1].put(None)
@@ -237,43 +261,20 @@ def manager():
 				for channel in Global.account_cache:
 					if cmd[1] in Global.account_cache[channel]:
 						chans.append(channel)
+				Logger.log("mw", "Invalidating whois cache for " + " ".join(chans))
 				for channel in chans:
 					del Global.account_cache[channel]
-				connect_instance(cmd[1])
-			elif cmd[0] == "Disconnect":
-				Global.instances[cmd[1]].send_lock.acquire()
-				Global.instances[cmd[1]].reader_dying.set()
-				Global.instances[cmd[1]].writer_dying.set()
-				Global.instances[cmd[1]].reader_dead.wait()
-				Global.instances[cmd[1]].writer_dead.wait()
-				try:
-					Global.instances[cmd[1]].error_lock.release()
-				except threading.ThreadError:
-					pass
-				try:
-					while True:
-						Global.instances[cmd[1]].send_queue.get(False)
-				except Queue.Empty:
-					pass
-				try:
-					while True:
-						Global.instances[cmd[1]].whois_queue.get(False)[1].put(None)
-						Global.instances[cmd[1]].whois_queue.task_done()
-				except Queue.Empty:
-					pass
-				chans = []
-				for channel in Global.account_cache:
-					if cmd[1] in Global.account_cache[channel]:
-						chans.append(channel)
-				for channel in chans:
-					del Global.account_cache[channel]
-				del Global.instances[cmd[1]]
+				if cmd[0] == "Reconnect":
+					connect_instance(cmd[1])
+				else:
+					del Global.instances[cmd[1]]
 			elif cmd[0] == "Die":
+				Logger.log("m", "Dying")
 				return
 		except Exception as e:
 			type, value, tb = sys.exc_info()
-			print("manager ===============")
-			traceback.print_tb(tb)
-			print(repr(e))
-			print("manager ===============")
+			Logger.log("me", "ERROR in manager")
+			Logger.log("me", repr(e))
+			Logger.log("me", "".join(traceback.format_tb(tb)))
 		Global.manager_queue.task_done()
+		Logger.log("m", "Done")
