@@ -109,6 +109,7 @@ class Instance(object):
 		self.whois_lock = threading.Lock()
 		self.whois_queue = Queue.Queue()
 		self.lastsend = time.time()
+		self.lastwhois = None
 		self.reader_dying = threading.Event()
 		self.reader_dead = threading.Event()
 		self.writer_dying = threading.Event()
@@ -261,9 +262,6 @@ def manager():
 				for channel in Global.account_cache:
 					if cmd[1] in Global.account_cache[channel]:
 						chans.append(channel)
-				Logger.log("mw", "Invalidating whois cache for " + " ".join(chans))
-				for channel in chans:
-					del Global.account_cache[channel]
 				if cmd[0] == "Reconnect":
 					connect_instance(cmd[1])
 				else:

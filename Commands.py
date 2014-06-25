@@ -1,6 +1,6 @@
 # coding=utf8
 import sys, os, time
-import Irc, Transactions, Logger, Global, Hooks
+import Irc, Transactions, Logger, Global, Hooks, Config
 
 commands = {}
 
@@ -18,12 +18,12 @@ def balance(req, _):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	confirmed = int(Transactions.balance(acct))
-	full = int(Transactions.balance(acct, 0))
-	if full == confirmed:
-		req.reply("Your balance is Ɖ%i" % (confirmed))
+	confirmed = Transactions.balance(acct)
+	pending = Transactions.balance_unconfirmed(acct)
+	if pending:
+		req.reply("Your balance is Ɖ%i (+Ɖ%i unconfirmed)" % (confirmed, pending))
 	else:
-		req.reply("Your balance is Ɖ%i (+Ɖ%i unconfirmed)" % (confirmed, full - confirmed))
+		req.reply("Your balance is Ɖ%i" % (confirmed))
 commands["balance"] = balance
 
 def deposit(req, _):
@@ -31,7 +31,7 @@ def deposit(req, _):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	req.reply("To deposit, send coins to %s (transactions will be credited after 4 confirmations)" % Transactions.deposit_address(acct).encode("utf8"))
+	req.reply("To deposit, send coins to %s (transactions will be credited after %d confirmations)" % (Transactions.deposit_address(acct), Config.config["confirmations"]))
 commands["deposit"] = deposit
 
 def withdraw(req, arg):
@@ -41,32 +41,29 @@ def withdraw(req, arg):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	with Transactions.lock:
-		balance = int(Transactions.balance(acct))
-		if len(arg) == 1:
-			amount = max(balance - 1, 0)
-		else:
-			try:
-				amount = int(arg[1])
-				if amount <= 0:
-					raise ValueError()
-			except ValueError as e:
-				req.reply_private(repr(arg[1]) + " - invalid amount")
-				return None
-		to = arg[0]
-		if amount > balance - 1 or balance == 1:
-			return req.reply_private("You tried to withdraw Ɖ%i (Ɖ+1 TX fee) but you only have Ɖ%i" % (amount, balance))
-		if not Transactions.verify_address(to):
-			return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
-		with Logger.token() as token:
-			token.log("t", "moving %d(+1) from acct:%s(%d) to %s" % (amount, acct, balance, to))
+	if len(arg) == 1:
+		amount = max(Transactions.balance(acct) - 1, 1)
+	else:
+		try:
+			amount = int(arg[1])
+			if amount <= 0:
+				raise ValueError()
+		except ValueError as e:
+			req.reply_private(repr(arg[1]) + " - invalid amount")
+			return None
+	to = arg[0]
+	if not Transactions.verify_address(to):
+		return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
+	with Logger.token() as token:
+		token.log("t", "moving %d(+1) from acct:%s(%d) to %s" % (amount, acct, Transactions.balance(acct), to))
+		try:
 			tx = Transactions.withdraw(acct, to, amount)
-			if tx:
-				token.log("t", "success, TX id is %s (acct:%s(%d))" % (tx.encode("utf8"), acct, Transactions.balance(acct)))
-				req.reply("Coins have been sent, see http://dogechain.info/tx/%s [%s]" % (tx.encode("utf8"), token.id))
-			else:
-				token.log("te", "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
-				req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
+			token.log("t", "success, TX id is %s (acct:%s(%d))" % (tx, acct, Transactions.balance(acct)))
+			req.reply("Coins have been sent, see http://dogechain.info/tx/%s [%s]" % (tx, token.id))
+		except Transactions.NotEnoughMoney:
+			req.reply_private("You tried to withdraw Ɖ%i (+Ɖ1 TX fee) but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
+			token.log("te", "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
+			#req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
 commands["withdraw"] = withdraw
 
 def tip(req, arg):
@@ -89,23 +86,19 @@ def tip(req, arg):
 	except ValueError as e:
 		req.reply_private(repr(arg[1]) + " - invalid amount")
 		return None
-	with Transactions.lock:
-		balance = Transactions.balance(acct)
-		if amount > balance:
-			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, balance))
-		with Logger.token() as token:
-			token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, balance, toacct, Transactions.balance(toacct)))
-			if Transactions.tip(acct, toacct, amount):
-				token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				if Irc.equal_nicks(req.nick, req.target):
-					req.reply("Done [%s]" % (token.id))
-				else:
-					req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token.id))
-				Irc.instance_send(req.instance, "PRIVMSG", to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token.id))
-				return
+	with Logger.token() as token:
+		token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+		try:
+			Transactions.tip(acct, toacct, amount)
+			token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			if Irc.equal_nicks(req.nick, req.target):
+				req.reply("Done [%s]" % (token.id))
 			else:
-				token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
+				req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token.id))
+			Irc.instance_send(req.instance, "PRIVMSG", to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token.id))
+		except Transactions.NotEnoughMoney:
+			token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["tip"] = tip
 
 def mtip(req, arg):
@@ -139,61 +132,59 @@ def mtip(req, arg):
 			targets.append(target)
 			amounts.append(amount)
 			total += amount
+	balance = Transactions.balance(acct)
+	if total > balance:
+		return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, balance))
 	accounts = Irc.account_names(targets)
-	with Transactions.lock:
-		balance = Transactions.balance(acct)
-		if total > balance:
-			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, balance))
-		tipped = ""
-		failed = ""
-		for i in range(len(targets)):
-			if accounts[i]:
-				with Logger.token() as token:
-					token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amounts[i], acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
-					if Transactions.tip(acct, accounts[i], amounts[i]):
-						token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
-						tipped += " %s %d [%s]" % (targets[i], amounts[i], token.id)
-					else:
-						token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), accounts[i], Transactions.balance(accounts[i])))
-						tipped += " %s %d [%s]" % (targets[i], amounts[i], token.id)
-			elif accounts[i] == None:
-				failed += " %s (offline)" % (targets[i])
-			else:
-				failed += " %s (unidentified)" % (targets[i])
-		output = "Tipped:" + tipped
-		if len(failed):
-			output += "  Failed:" + failed
-		req.reply(output)
+	totip = {}
+	failed = ""
+	tipped = ""
+	for i in range(len(targets)):
+		if accounts[i]:
+			totip[accounts[i]] = amounts[i]
+			tipped += " %s %d" % (targets[i], amounts[i])
+		elif accounts[i] == None:
+			failed += " %s (offline)" % (targets[i])
+		else:
+			failed += " %s (unidentified)" % (targets[i])
+	with Logger.token() as token:
+		token.log("t", "mtipping from acct:%s(%d)" % (acct, balance))
+		try:
+			Transactions.tip_multiple(acct, totip)
+			token.log("t", "success (acct:%s(%d))" % (acct, Transactions.balance(acct)))
+			tipped += " [%s]" % (token.id)
+		except Transactions.NotEnoughMoney:
+			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, Transactions.balance(acct)))
+			token.log("te", "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
+	output = "Tipped:" + tipped
+	if len(failed):
+		output += "  Failed:" + failed
+	req.reply(output)
 commands["mtip"] = mtip
 
 def donate(req, arg):
-	"""%donate <amount> - Donates 'amount' coins to the developers of this bot"""
 	if len(arg) < 1:
 		return req.reply("%donate <amount>")
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	with Transactions.lock:
-		balance = Transactions.balance(acct)
+	toacct = "@DONATIONS"
+	try:
+		amount = int(arg[0])
+		if amount <= 0:
+			raise ValueError()
+	except ValueError as e:
+		req.reply_private(repr(arg[0]) + " - invalid amount")
+		return None
+	with Logger.token() as token:
+		token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 		try:
-			amount = int(arg[0])
-			if amount <= 0:
-				raise ValueError()
-		except ValueError as e:
-			req.reply_private(repr(arg[0]) + " - invalid amount")
-			return None
-		toacct = "@DONATIONS"
-		if amount > balance:
-			return req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, balance))
-		with Logger.token() as token:
-			token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, balance, toacct, Transactions.balance(toacct)))
-			if Transactions.tip(acct, toacct, amount):
-				token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				req.reply("Done [%s]" % (token.id))
-				return
-			else:
-				token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
-				req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
+			Transactions.tip(acct, toacct, amount)
+			token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			req.reply("Done [%s]" % (token.id))
+		except Transactions.NotEnoughMoney:
+			token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
 
 def _help(req, arg):

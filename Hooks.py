@@ -171,8 +171,17 @@ def kick(instance, _, channel, nick, *__):
 		Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["KICK"] = kick
 
-def quit(instance, source, channel):
+def quit(instance, source, _):
 	nick = Irc.get_nickname(source)
+	if nick == instance:
+		chans = []
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				chans.append(channel)
+		for channel in chans:
+				del Global.account_cache[channel]
+				Logger.log("w", "Removing cache for " + channel)
+		return
 	for channel in Global.account_cache:
 		if nick in Global.account_cache[channel]:
 			del Global.account_cache[channel][nick]
@@ -222,7 +231,7 @@ def whois_end(instance, _, __, target, ___):
 	try:
 		nick, q = Global.instances[instance].whois_queue.get(False)
 		if Irc.equal_nicks(target, nick):
-			Logger.log("w", instance + ": WHOIS of " + target + " is " + Global.instances[instance].lastwhois)
+			Logger.log("w", instance + ": WHOIS of " + target + " is " + repr(Global.instances[instance].lastwhois))
 			q.put(Global.instances[instance].lastwhois, True)
 		else:
 			Logger.log("we", instance + ": WHOIS reply for " + target + " but queued " + nick + " returning None")

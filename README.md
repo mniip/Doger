@@ -19,6 +19,7 @@ config = {
 	"port": 6667,
 	"user": "identname",
 	"rname": "Real name",
+	"confirmations": 4,
 	"account": "nickservaccountname",
 	"password": "nickservpassword",
 	"admins": {
@@ -39,6 +40,7 @@ daemon=1
 irc=0
 dnsseed=1
 paytxfee=1.0
+blocknotify=/usr/bin/touch blocknotify/blocknotify
 ```
     
 **Running it:**
