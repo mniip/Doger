@@ -1,6 +1,6 @@
 import sys, os, threading, pyinotify
 import dogecoinrpc, psycopg2
-import Config
+import Config, Logger
 
 conn = dogecoinrpc.connect_to_local()
 
@@ -20,7 +20,10 @@ class Inotifier(pyinotify.ProcessEvent):
 			with blocklock:
 				notify_block()
 		except Exception as e:
-			print("exception")
+			type, value, tb = sys.exc_info()
+			Logger.log("te", "ERROR in blocknotify")
+			Logger.log("te", repr(e))
+			Logger.log("te", "".join(traceback.format_tb(tb)))
 			pass
 		finally:
 			os.remove(os.path.join(event.path, event.name))
@@ -30,6 +33,7 @@ notifier.start()
 
 class NotEnoughMoney(Exception):
 	pass
+InsufficientFunds = dogecoinrpc.exceptions.InsufficientFunds
 
 unconfirmed = {}
 
@@ -45,11 +49,15 @@ def notify_block():
 		cur.executemany("UPDATE address_account SET used = '1' WHERE address = %s", addrlist)
 	unconfirmed = {}
 	for tx in lb["transactions"]:
-		if tx.category == "receive" and tx.confirmations < Config.config["confirmations"]:
-			cur.execute("SELECT account FROM address_account WHERE address = %s", (tx.address,))
-			if cur.rowcount:
-				account = cur.fetchone()[0]
-				unconfirmed[account] = unconfirmed.get(account, 0) + int(tx.amount)
+		if tx.category == "receive":
+			if tx.confirmations < Config.config["confirmations"]:
+				cur.execute("SELECT account FROM address_account WHERE address = %s", (tx.address,))
+				if cur.rowcount:
+					account = cur.fetchone()[0]
+					unconfirmed[account] = unconfirmed.get(account, 0) + int(tx.amount)
+			else:
+				with Logger.token() as token:
+					token.log("t", "deposited %d to %s, TX id is %s" % (int(tx.amount), tx.address.encode("ascii"), tx.txid.encode("ascii")))
 	cur.execute("UPDATE lastblock SET block = %s", (lb["lastblock"],))
 	db.commit()
 	lastblock = lb["lastblock"]

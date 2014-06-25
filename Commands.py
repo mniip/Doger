@@ -55,15 +55,15 @@ def withdraw(req, arg):
 	if not Transactions.verify_address(to):
 		return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
 	with Logger.token() as token:
-		token.log("t", "moving %d(+1) from acct:%s(%d) to %s" % (amount, acct, Transactions.balance(acct), to))
 		try:
 			tx = Transactions.withdraw(acct, to, amount)
-			token.log("t", "success, TX id is %s (acct:%s(%d))" % (tx, acct, Transactions.balance(acct)))
+			token.log("t", "acct:%s withdrew %d, TX id is %s (acct:%s(%d))" % (acct, amount, tx, acct, Transactions.balance(acct)))
 			req.reply("Coins have been sent, see http://dogechain.info/tx/%s [%s]" % (tx, token.id))
 		except Transactions.NotEnoughMoney:
 			req.reply_private("You tried to withdraw Ɖ%i (+Ɖ1 TX fee) but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
-			token.log("te", "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
-			#req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
+		except Transactions.InsufficientFunds:
+			token.log("te", "acct:%s tried to withdraw %d" % (acct, amount))
+			req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
 commands["withdraw"] = withdraw
 
 def tip(req, arg):
@@ -87,17 +87,15 @@ def tip(req, arg):
 		req.reply_private(repr(arg[1]) + " - invalid amount")
 		return None
 	with Logger.token() as token:
-		token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 		try:
 			Transactions.tip(acct, toacct, amount)
-			token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			token.log("t", "acct:%s tipped %d to acct:%s(%d)" % (acct, amount, toacct, Transactions.balance(toacct)))
 			if Irc.equal_nicks(req.nick, req.target):
 				req.reply("Done [%s]" % (token.id))
 			else:
 				req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token.id))
 			Irc.instance_send(req.instance, "PRIVMSG", to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token.id))
 		except Transactions.NotEnoughMoney:
-			token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 			req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["tip"] = tip
 
@@ -148,14 +146,12 @@ def mtip(req, arg):
 		else:
 			failed += " %s (unidentified)" % (targets[i])
 	with Logger.token() as token:
-		token.log("t", "mtipping from acct:%s(%d)" % (acct, balance))
 		try:
 			Transactions.tip_multiple(acct, totip)
-			token.log("t", "success (acct:%s(%d))" % (acct, Transactions.balance(acct)))
+			token.log("t", "acct:%s mtipped: %s" % (acct, repr(totip)))
 			tipped += " [%s]" % (token.id)
 		except Transactions.NotEnoughMoney:
 			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, Transactions.balance(acct)))
-			token.log("te", "failed (acct:%s(%d))" % (acct, Transactions.balance(acct)))
 	output = "Tipped:" + tipped
 	if len(failed):
 		output += "  Failed:" + failed
@@ -177,13 +173,11 @@ def donate(req, arg):
 		req.reply_private(repr(arg[0]) + " - invalid amount")
 		return None
 	with Logger.token() as token:
-		token.log("t", "moving %d from acct:%s(%d) to acct:%s(%d)" % (amount, acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 		try:
 			Transactions.tip(acct, toacct, amount)
-			token.log("t", "success (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
+			token.log("t", "acct:%s tipped %d to acct:%s(%d)" % (acct, amount, toacct, Transactions.balance(toacct)))
 			req.reply("Done [%s]" % (token.id))
 		except Transactions.NotEnoughMoney:
-			token.log("te", "failed (acct:%s(%d) acct:%s(%d))" % (acct, Transactions.balance(acct), toacct, Transactions.balance(toacct)))
 			req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
 
