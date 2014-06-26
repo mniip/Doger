@@ -48,6 +48,7 @@ def withdraw(req, arg):
 			amount = int(arg[1])
 			if amount <= 0:
 				raise ValueError()
+			amount = max(amount, 1000000000000)
 		except ValueError as e:
 			req.reply_private(repr(arg[1]) + " - invalid amount")
 			return None
@@ -83,6 +84,7 @@ def tip(req, arg):
 		amount = int(arg[1])
 		if amount <= 0:
 			raise ValueError()
+		amount = min(amount, 1000000000000)
 	except ValueError as e:
 		req.reply_private(repr(arg[1]) + " - invalid amount")
 		return None
@@ -119,6 +121,7 @@ def mtip(req, arg):
 	for i in range(0, len(arg), 2):
 		target = arg[i]
 		amount = int(arg[i + 1])
+		amount = min(amount, 1000000000000)
 		found = False
 		for i in range(len(targets)):
 			if Irc.equal_nicks(targets[i], target):
@@ -169,6 +172,7 @@ def donate(req, arg):
 		amount = int(arg[0])
 		if amount <= 0:
 			raise ValueError()
+		amount = max(amount, 1000000000000)
 	except ValueError as e:
 		req.reply_private(repr(arg[0]) + " - invalid amount")
 		return None
