@@ -3,6 +3,7 @@ import dogecoinrpc, psycopg2
 import Config, Logger
 
 conn = dogecoinrpc.connect_to_local()
+rpclock = threading.Lock()
 
 def connect():
 	return psycopg2.connect(database = "doger")
@@ -39,7 +40,8 @@ unconfirmed = {}
 
 def notify_block(): 
 	global lastblock, unconfirmed
-	lb = conn.listsinceblock(lastblock, 4)
+	with rpclock:
+		lb = conn.listsinceblock(lastblock, 4)
 	db = connect()
 	cur = db.cursor()
 	txlist = [(int(tx.amount), tx.address) for tx in lb["transactions"] if tx.category == "receive" and tx.confirmations >= Config.config["confirmations"]]
@@ -119,7 +121,8 @@ def withdraw(account, address, amount):
 	if not cur.rowcount:
 		raise NotEnoughMoney()
 	try:
-	 	tx = conn.sendtoaddress(address, amount, comment = "sent with Doger")
+		with rpclock:
+		 	tx = conn.sendtoaddress(address, amount, comment = "sent with Doger")
 	except Exception as e:
 		raise e
 	db.commit()
@@ -131,7 +134,8 @@ def deposit_address(account):
 	cur.execute("SELECT address FROM address_account WHERE used = '0' AND account = %s LIMIT 1", (account,))
 	if cur.rowcount:
 		return cur.fetchone()[0]
-	addr = conn.getnewaddress()
+	with rpclock:
+		addr = conn.getnewaddress()
 	try:
 		cur.execute("SELECT * FROM accounts WHERE account = %s", (account,))
 		if not cur.rowcount:
@@ -143,4 +147,5 @@ def deposit_address(account):
 	return addr.encode("ascii")
 
 def verify_address(address):
-	return conn.validateaddress(address).isvalid
+	with rpclock:
+		return conn.validateaddress(address).isvalid

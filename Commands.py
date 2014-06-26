@@ -48,7 +48,7 @@ def withdraw(req, arg):
 			amount = int(arg[1])
 			if amount <= 0:
 				raise ValueError()
-			amount = max(amount, 1000000000000)
+			amount = min(amount, 1000000000000)
 		except ValueError as e:
 			req.reply_private(repr(arg[1]) + " - invalid amount")
 			return None
@@ -172,7 +172,7 @@ def donate(req, arg):
 		amount = int(arg[0])
 		if amount <= 0:
 			raise ValueError()
-		amount = max(amount, 1000000000000)
+		amount = min(amount, 1000000000000)
 	except ValueError as e:
 		req.reply_private(repr(arg[0]) + " - invalid amount")
 		return None
