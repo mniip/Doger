@@ -25,6 +25,10 @@ config = {
 	"admins": {
 		"unaffiliated/johndoe": True # hosts/cloaks of admins
 	},
+# optional:
+#	"ssl": {
+#		"certs": "/etc/ssl/certs/ca-certificates.crt"
+#	},
 	"instances": {
 		"nick1": ["#channel1", "#channel2"],
 		"nick2": ["#channel3"]

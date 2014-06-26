@@ -1,4 +1,4 @@
-import socket, random, threading, Queue, sys, traceback, time
+import socket, random, threading, Queue, sys, traceback, time, ssl
 from string import maketrans
 import Config, Global, Hooks, Logger
 
@@ -121,12 +121,18 @@ def reader_thread(instance, sock):
 	buffer = ""
 	while not Global.instances[instance].reader_dying.is_set():
 		try:
-			while buffer.find("\n") != -1:
-				line, buffer = buffer.split("\n", 1)
-				line = line.rstrip("\r")
-				Logger.log("r", instance + ": > " + line)
-				handle_input(instance, line)
-			buffer += sock.recv(4096)
+			try:
+				while buffer.find("\n") != -1:
+					line, buffer = buffer.split("\n", 1)
+					line = line.rstrip("\r")
+					Logger.log("r", instance + ": > " + line)
+					handle_input(instance, line)
+				buffer += sock.recv(4096)
+			except ssl.SSLError as e:
+				if e.message == 'The read operation timed out':
+					raise socket.timeout()
+				else:
+					raise e
 		except socket.timeout:
 			pass
 		except socket.error as e:
@@ -211,8 +217,11 @@ def instance_send_nolock(instance, *args):
 def connect_instance(instance):
 	Logger.log("c", instance + ": Connecting")
 	host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
-	sock = socket.create_connection((host, Config.config["port"]), None)
-	sock.settimeout(0.05)
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	if Config.config.get("ssl", None):
+		sock = ssl.wrap_socket(sock, ca_certs = Config.config["ssl"]["certs"], cert_reqs = ssl.CERT_REQUIRED)
+	sock.connect((host, Config.config["port"]))
+	sock.settimeout(0.1)
 	writer = threading.Thread(target = writer_thread, args = (instance, sock))
 	reader = threading.Thread(target = reader_thread, args = (instance, sock))
 	Global.instances[instance].reader_dying.clear()
