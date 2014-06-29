@@ -2,9 +2,11 @@ import socket, random, threading, Queue, sys, traceback, time, ssl
 from string import maketrans
 import Config, Global, Hooks, Logger
 
-ircupper = maketrans(
-	"abcdefghijklmnopqrstuvwxyz[]~\\",
-	"ABCDEFGHIJKLMNOPQRSTUVWXYZ{}^|")
+lowercase = "abcdefghijklmnopqrstuvwxyz[]~\\"
+uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ{}^|"
+caseless = "0123456789_-`"
+
+ircupper = maketrans(lowercase, uppercase)
 
 def get_nickname(hostmask):
 	return hostmask.split("!", 1)[0]
@@ -20,6 +22,11 @@ def nick_upper(nickname):
 
 def equal_nicks(a, b):
 	return nick_upper(a) == nick_upper(b)
+
+def sanitize_nickname(nickname):
+	if len(nickname):
+		return "".join(c if c in lowercase or c in uppercase or c in caseless else '.' for c in nickname)
+	return "."
 
 def is_ignored(host):
 	r = Global.ignores.get(host, None)
@@ -37,8 +44,8 @@ def is_admin(hostmask):
 	return Config.config["admins"].get(get_host(hostmask), False)
 
 def account_names(nicks):
-	for n in nicks:
-		assert(len(n))
+	for i in range(len(nicks)):
+		nicks[i] = sanitize_nickname(nicks[i])
 	queues = [None for _ in nicks]
 	results = [None for _ in nicks]
 	Logger.log("w", "Task: " + " ".join(nicks))
