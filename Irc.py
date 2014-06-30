@@ -4,7 +4,7 @@ import Config, Global, Hooks, Logger
 
 lowercase = "abcdefghijklmnopqrstuvwxyz[]~\\"
 uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ{}^|"
-caseless = "0123456789_-`"
+caseless = "0123456789_-`@"
 
 ircupper = maketrans(lowercase, uppercase)
 
@@ -189,7 +189,8 @@ def writer_thread(instance, sock):
 		except Queue.Empty:
 			pass
 		except socket.error as e:
-			q.task_done()
+			if e.message != "Timeout":
+				q.task_done()
 			Logger.log("ce", instance + ": Writer failed")
 			if Global.instances[instance].error_lock.acquire(False):
 				type, value, tb = sys.exc_info()
