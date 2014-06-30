@@ -77,21 +77,7 @@ def run_command(cmd, req, arg):
 
 def message(instance, source, target, text):
 	host = Irc.get_host(source)
-	if host == "lucas.fido.pw":
-		Logger.log("c", instance + ": %s <%s> %s " % (target, Irc.get_nickname(source), text))
-		m = re.match(r"Wow!  (\S*) just sent you Ð\d*\.", text)
-		if not m:
-			m = re.match(r"Wow!  (\S*) sent Ð\d* to Doger!", text)
-		if m:
-			nick = m.group(1)
-			acct = Irc.account_names([nick])[0]
-			if acct:
-				address = Transactions.deposit_address(acct)
-				Irc.instance_send(instance, "PRIVMSG", "fido", "withdraw " + address.encode("utf8"))
-				Irc.instance_send(instance, "PRIVMSG", nick, "Your tip has been withdrawn to your account and will appear in %balance soon")
-			else:
-				Irc.instance_send(instance, "PRIVMSG", nick, "You aren't identified with freenode services (o-O?)")
-	elif text == "\x01VERSION\x01":
+	if text == "\x01VERSION\x01":
 		p = subprocess.Popen(["git", "rev-parse", "HEAD"], stdout = subprocess.PIPE)
 		hash, _ = p.communicate()
 		hash = hash.strip()
