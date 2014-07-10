@@ -1,6 +1,5 @@
+import Config
 import time, md5
-
-logfile = "logs/Doger.log"
 
 def log(spec, text):
 # Error Raw Connection Tx Whois Manager
@@ -8,7 +7,7 @@ def log(spec, text):
 	specifier = ""
 	for c in template:
 		specifier += c if c in spec else "_"
-	with open(logfile, "a") as f:
+	with open(Config.config["logfile"], "a") as f:
 		t = time.time()
 		for line in text.split("\n"):
 			f.write("[%s] [%f] <%s> %s\n" % (time.ctime(t), t, specifier, line))

@@ -25,6 +25,7 @@ config = {
 	"admins": {
 		"unaffiliated/johndoe": True # hosts/cloaks of admins
 	},
+	"prefix": "!", # the trigger character
 # optional:
 #	"ssl": {
 #		"certs": "/etc/ssl/certs/ca-certificates.crt"
@@ -32,7 +33,15 @@ config = {
 	"instances": {
 		"nick1": ["#channel1", "#channel2"],
 		"nick2": ["#channel3"]
-	}
+	},
+# optional:
+#	"ignore": {
+#		"cost": 10, # score added for every command
+#		"limit": 80, # max allowed score
+#		"timeout": 240 # ignore length
+#	},
+	"logfile": "path/to/log",
+	"database": "name of pgsql database"
 }
 ```
 
@@ -45,6 +54,17 @@ irc=0
 dnsseed=1
 paytxfee=1.0
 blocknotify=/usr/bin/touch blocknotify/blocknotify
+```
+
+- Create a postgres database with the following schema:
+
+```
+CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DEFAULT 0, CONSTRAINT balance CHECK ((balance >= 0)));
+CREATE TABLE address_account (address character varying(34) NOT NULL, account character varying(16), used bit(1) DEFAULT B'0'::"bit" NOT NULL);
+CREATE TABLE lastblock (block character varying(64));
+ALTER TABLE ONLY accounts ADD CONSTRAINT accounts_pkey PRIMARY KEY (account);
+ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_pkey PRIMARY KEY (address);
+ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_account_fkey FOREIGN KEY (account) REFERENCES accounts(account);
 ```
     
 **Running it:**

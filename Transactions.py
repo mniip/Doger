@@ -6,7 +6,7 @@ conn = dogecoinrpc.connect_to_local()
 rpclock = threading.Lock()
 
 def connect():
-	return psycopg2.connect(database = "doger")
+	return psycopg2.connect(database = Config.config["database"])
 
 cur = connect().cursor()
 cur.execute("SELECT block FROM lastblock")

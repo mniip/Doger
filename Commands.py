@@ -37,7 +37,7 @@ commands["deposit"] = deposit
 def withdraw(req, arg):
 	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, sends the whole balance"""
 	if len(arg) == 0:
-		return req.reply("%withdraw <address> [amount]")
+		return req.reply(gethelp("withdraw"))
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
@@ -70,7 +70,7 @@ commands["withdraw"] = withdraw
 def tip(req, arg):
 	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname"""
 	if len(arg) < 2:
-		return req.reply("%tip <target> <amount>")
+		return req.reply(gethelp("tip"))
 	to = arg[0]
 	acct, toacct = Irc.account_names([req.nick, to])
 	if not acct:
@@ -104,7 +104,7 @@ commands["tip"] = tip
 def mtip(req, arg):
 	"""%mtip <targ1> <amt1> [<targ2> <amt2> ...] - Send multiple tips at once"""
 	if not len(arg) or len(arg) % 2:
-		return req.reply("%mtip <targ1> <amt1> [<targ2> <amt2> ...]")
+		return req.reply(gethelp("mtip"))
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
@@ -163,7 +163,7 @@ commands["mtip"] = mtip
 
 def donate(req, arg):
 	if len(arg) < 1:
-		return req.reply("%donate <amount>")
+		return req.reply(gethelp("donate"))
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
@@ -185,16 +185,19 @@ def donate(req, arg):
 			req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
 
+def gethelp(name):
+	if name[0] == Config.config["prefix"]:
+		name = name[1:]
+	cmd = commands.get(name, None)
+	if cmd and cmd.__doc__:
+		return cmd.__doc__.split("\n")[0].replace("%", Config.config["prefix"])
+
 def _help(req, arg):
 	"""%help - list of commands; %help <command> - help for specific command"""
 	if len(arg):
-		if arg[0][0] == '%':
-			name = arg[0][1:]
-		else:
-			name = arg[0]
-		cmd = commands.get(name, None)
-		if cmd and cmd.__doc__:
-			req.reply(cmd.__doc__.split("\n")[0])
+		h = gethelp(arg[0])
+		if h:
+			req.reply(h)
 	else:
 		if not Irc.equal_nicks(req.target, req.nick):
 			return req.reply("I'm Doger, an IRC dogecoin tipbot. For more info do /msg Doger help")
@@ -203,7 +206,7 @@ def _help(req, arg):
 			ident = "you're identified as \2" + acct + "\2"
 		else:
 			ident = "you're not identified"
-		req.say("I'm Doger, I'm an IRC dogecoin tipbot. To get help about a specific command, say \2%help <command>\2  Commands: %tip %balance %withdraw %deposit %mtip %donate %help")
+		req.say("I'm Doger, I'm an IRC dogecoin tipbot. To get help about a specific command, say \2%help <command>\2  Commands: %tip %balance %withdraw %deposit %mtip %donate %help".replace("%", Config.config["prefix"]))
 		req.say("Note that to receive or send tips you should be identified with freenode services (%s). For any support questions, including those related to lost coins, join ##doger" % (ident))
 commands["help"] = _help
 
@@ -218,10 +221,7 @@ commands["reload"] = load
 def _exec(req, arg):
 	"""
 	admin"""
-	try:
-		req.reply(repr(eval(" ".join(arg))))
-	except SyntaxError:
-		exec(" ".join(arg))
+	exec(" ".join(arg).replace("$", "\n"))
 commands["exec"] = _exec
 
 def ignore(req, arg):
@@ -233,12 +233,17 @@ commands["ignore"] = ignore
 def die(req, arg):
 	"""
 	admin"""
-	for instance in Global.instances:
-		Global.manager_queue.put(("Disconnect", instance))
-	Global.manager_queue.join()
 	if arg[0] == "exec":
+		for instance in Global.instances:
+			Global.manager_queue.put(("Disconnect", instance))
+		Global.manager_queue.join()
 		os.execv(sys.executable, [sys.executable] + sys.argv)
+	elif arg[0] == "thread":
+		Global.manager_queue.put(("Reconnect", req.instance))
 	else:
+		for instance in Global.instances:
+			Global.manager_queue.put(("Disconnect", instance))
+		Global.manager_queue.join()
 		Global.manager_queue.put(("Die",))
 commands["die"] = die
 
