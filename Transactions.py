@@ -1,5 +1,5 @@
-import sys, os, threading, pyinotify
-import dogecoinrpc, psycopg2
+import sys, os, threading, pyinotify, traceback
+import dogecoinrpc, dogecoinrpc.connection, psycopg2
 import Config, Logger
 
 conn = dogecoinrpc.connect_to_local()
@@ -32,16 +32,33 @@ notifier = pyinotify.ThreadedNotifier(watcher, Inotifier())
 wdd = watcher.add_watch("blocknotify", pyinotify.EventsCodes.ALL_FLAGS["IN_CREATE"])
 notifier.start()
 
+def stop():
+	notifier.stop()
+
 class NotEnoughMoney(Exception):
 	pass
 InsufficientFunds = dogecoinrpc.exceptions.InsufficientFunds
 
 unconfirmed = {}
 
+# Monkey-patching dogecoinrpc
+def patchedlistsinceblock(self, block_hash, minconf=1):
+	res = self.proxy.listsinceblock(block_hash, minconf)
+	res['transactions'] = [dogecoinrpc.connection.TransactionInfo(**x) for x in res['transactions']]
+	return res
+try:
+	with rpclock:
+		conn.listsinceblock("0", 1)
+except TypeError:
+	dogecoinrpc.connection.DogecoinConnection.listsinceblock = patchedlistsinceblock
+	conn = dogecoinrpc.connect_to_local()
+
+# Enf of monkey-patching
+
 def notify_block(): 
 	global lastblock, unconfirmed
 	with rpclock:
-		lb = conn.listsinceblock(lastblock, 4)
+		lb = conn.listsinceblock(lastblock, Config.config["confirmations"])
 	db = connect()
 	cur = db.cursor()
 	txlist = [(int(tx.amount), tx.address) for tx in lb["transactions"] if tx.category == "receive" and tx.confirmations >= Config.config["confirmations"]]

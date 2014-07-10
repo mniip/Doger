@@ -237,6 +237,7 @@ def die(req, arg):
 		for instance in Global.instances:
 			Global.manager_queue.put(("Disconnect", instance))
 		Global.manager_queue.join()
+		Transactions.stop()
 		os.execv(sys.executable, [sys.executable] + sys.argv)
 	elif arg[0] == "thread":
 		Global.manager_queue.put(("Reconnect", req.instance))
@@ -244,6 +245,7 @@ def die(req, arg):
 		for instance in Global.instances:
 			Global.manager_queue.put(("Disconnect", instance))
 		Global.manager_queue.join()
+		Transactions.stop()
 		Global.manager_queue.put(("Die",))
 commands["die"] = die
 

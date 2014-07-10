@@ -62,6 +62,7 @@ blocknotify=/usr/bin/touch blocknotify/blocknotify
 CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DEFAULT 0, CONSTRAINT balance CHECK ((balance >= 0)));
 CREATE TABLE address_account (address character varying(34) NOT NULL, account character varying(16), used bit(1) DEFAULT B'0'::"bit" NOT NULL);
 CREATE TABLE lastblock (block character varying(64));
+INSERT INTO lastblock VALUES ('0');
 ALTER TABLE ONLY accounts ADD CONSTRAINT accounts_pkey PRIMARY KEY (account);
 ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_pkey PRIMARY KEY (address);
 ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_account_fkey FOREIGN KEY (account) REFERENCES accounts(account);
