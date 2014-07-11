@@ -1,5 +1,5 @@
 import Config
-import time, md5
+import time, md5, random
 
 def log(spec, text):
 # Error Raw Connection Tx Whois Manager
@@ -28,6 +28,6 @@ class Token():
 
 def token():
 	m = md5.new()
-	t = time.time()
+	t = random.random()
 	m.update(str(t))
 	return Token(m.hexdigest()[:8])

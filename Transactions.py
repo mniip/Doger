@@ -25,9 +25,10 @@ class Inotifier(pyinotify.ProcessEvent):
 			Logger.log("te", "ERROR in blocknotify")
 			Logger.log("te", repr(e))
 			Logger.log("te", "".join(traceback.format_tb(tb)))
-			pass
-		finally:
+		try:
 			os.remove(os.path.join(event.path, event.name))
+		except:
+			pass
 notifier = pyinotify.ThreadedNotifier(watcher, Inotifier())
 wdd = watcher.add_watch("blocknotify", pyinotify.EventsCodes.ALL_FLAGS["IN_CREATE"])
 notifier.start()
