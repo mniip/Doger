@@ -70,14 +70,14 @@ def notify_block():
 	unconfirmed = {}
 	for tx in lb["transactions"]:
 		if tx.category == "receive":
-			if tx.confirmations < Config.config["confirmations"]:
-				cur.execute("SELECT account FROM address_account WHERE address = %s", (tx.address,))
-				if cur.rowcount:
-					account = cur.fetchone()[0]
-					unconfirmed[account] = unconfirmed.get(account, 0) + int(tx.amount)
-			else:
-				with Logger.token() as token:
-					token.log("t", "deposited %d to %s, TX id is %s" % (int(tx.amount), tx.address.encode("ascii"), tx.txid.encode("ascii")))
+			cur.execute("SELECT account FROM address_account WHERE address = %s", (tx.address,))
+			if cur.rowcount:
+				account = cur.fetchone()[0]
+				if tx.confirmations < Config.config["confirmations"]:
+						unconfirmed[account] = unconfirmed.get(account, 0) + int(tx.amount)
+				else:
+					with Logger.token() as token:
+						token.log("t", "deposited %d to %s, TX id is %s {%s + %d}" % (int(tx.amount), tx.address.encode("ascii"), tx.txid.encode("ascii"), account, int(tx.amount)))
 	cur.execute("UPDATE lastblock SET block = %s", (lb["lastblock"],))
 	db.commit()
 	lastblock = lb["lastblock"]
@@ -99,51 +99,71 @@ def balance(account):
 def balance_unconfirmed(account):
 	return unconfirmed.get(account, 0)
 
-def tip(source, target, amount): 
+def tip(token, source, target, amount): 
 	db = connect()
 	cur = db.cursor()
+	token.log("t", "tipping %d from %s to %s" % (amount, source, target))
 	try:
 		cur.execute("UPDATE accounts SET balance = balance - %s WHERE account = %s", (amount, source))
 	except psycopg2.IntegrityError as e:
+		token.log("te", "not enough money")
 		raise NotEnoughMoney()
 	if not cur.rowcount:
+		token.log("te", "not enough money")
 		raise NotEnoughMoney()
+	token.log("t", "{%s - %d}" % (source, amount))
 	cur.execute("UPDATE accounts SET balance = balance + %s WHERE account = %s", (amount, target)) 
-	if not cur.rowcount:
+	if cur.rowcount:
+		token.log("t", "{%s + %d}" % (target, amount))
+	else:
 		cur.execute("INSERT INTO accounts VALUES (%s, %s)", (target, amount))
+		token.log("t", "no rows affected {%s = %d}" % (target, amount))
 	db.commit()
 
-def tip_multiple(source, dict):
+def tip_multiple(token, source, dict):
 	db = connect()
 	cur = db.cursor()
 	for target in dict:
 		amount = dict[target]
+		token.log("t", "tipping %d from %s to %s" % (amount, source, target))
 		try:
 			cur.execute("UPDATE accounts SET balance = balance - %s WHERE account = %s", (amount, source))
 		except psycopg2.IntegrityError as e:
+			token.log("te", "not enough money")
 			raise NotEnoughMoney()
 		if not cur.rowcount:
+			token.log("te", "not enough money")
 			raise NotEnoughMoney()
+		token.log("t", "{%s - %d}" % (source, amount))
 		cur.execute("UPDATE accounts SET balance = balance + %s WHERE account = %s", (amount, target)) 
-		if not cur.rowcount:
+		if cur.rowcount:
+			token.log("t", "{%s + %d}" % (target, amount))
+		else:
 			cur.execute("INSERT INTO accounts VALUES (%s, %s)", (target, amount))
+			token.log("t", "no rows affected {%s = %d}" % (target, amount))
 	db.commit()
 
-def withdraw(account, address, amount): 
+def withdraw(token, account, address, amount): 
 	db = connect()
 	cur = db.cursor()
+	token.log("t", "withdrawing %d from %s to %s" % (amount, account, address))
 	try:
 		cur.execute("UPDATE accounts SET balance = balance - %s WHERE account = %s", (amount + 1, account))
+		token.log("t", "{%s - %d}" % (account, amount))
 	except psycopg2.IntegrityError as e:
+		token.log("te", "not enough money")
 		raise NotEnoughMoney()
 	if not cur.rowcount:
+		token.log("te", "not enough money")
 		raise NotEnoughMoney()
 	try:
 		with rpclock:
 		 	tx = conn.sendtoaddress(address, amount, comment = "sent with Doger")
 	except Exception as e:
+		token.log("te", "error")
 		raise e
 	db.commit()
+	token.log("t", "TX id is %s" % (tx.encode("ascii")))
 	return tx.encode("ascii")
 
 def deposit_address(account): 

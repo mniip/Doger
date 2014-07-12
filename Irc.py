@@ -72,7 +72,7 @@ def account_names(nicks):
 			Logger.log("w", "Smallest instance for whois is " + least)
 			with Global.whois_lock:
 				Global.instances[least].whois_queue.put((nicks[i], queues[i]))
-				instance_send(least, "WHOIS", nicks[i])
+				instance_send(least, ("WHOIS", nicks[i]))
 	for i in range(len(nicks)):
 		if results[i] == None:
 			account = queues[i].get(True)
@@ -112,7 +112,7 @@ def handle_input(instance, line):
 class Instance(object):
 	def __init__(self, instance):
 		self.can_send = threading.Event()
-		self.send_queue = Queue.Queue()
+		self.send_queue = Queue.PriorityQueue()
 		self.whois_lock = threading.Lock()
 		self.whois_queue = Queue.Queue()
 		self.lastsend = time.time()
@@ -180,7 +180,7 @@ def writer_thread(instance, sock):
 			if Global.instances[instance].lastsend + 300 < time.time():
 				raise socket.error("Timeout")
 			q = Global.instances[instance].send_queue
-			data = q.get(True, 0.5)
+			data = q.get(True, 0.5)[2]
 			throttle_output(instance)
 			line = compile(*data)
 			Logger.log("r", instance + ": < " + line)
@@ -215,12 +215,10 @@ def writer_thread(instance, sock):
 	Global.instances[instance].writer_dead.set()
 	Logger.log("c", instance + ": Writer exited")
 
-def instance_send(instance, *args):
-	Global.instances[instance].can_send.wait()
-	Global.instances[instance].send_queue.put(args)
-
-def instance_send_nolock(instance, *args):
-	Global.instances[instance].send_queue.put(args)
+def instance_send(instance, args, priority = 1, lock = True):
+	if lock:
+		Global.instances[instance].can_send.wait()
+	Global.instances[instance].send_queue.put((priority, time.time(), args))
 
 def connect_instance(instance):
 	Logger.log("c", instance + ": Connecting")
@@ -240,9 +238,9 @@ def connect_instance(instance):
 	writer.start()
 	reader.start()
 	Logger.log("c", instance + ": Initiating authentication")
-	instance_send_nolock(instance, "CAP", "REQ", "sasl")
-	instance_send_nolock(instance, "NICK", instance)
-	instance_send_nolock(instance, "USER", Config.config["user"], "*", "*", Config.config["rname"])
+	instance_send(instance, ("CAP", "REQ", "sasl"), lock = False)
+	instance_send(instance, ("NICK", instance), lock = False)
+	instance_send(instance, ("USER", Config.config["user"], "*", "*", Config.config["rname"]), lock = False)
 
 def manager():
 	while True:

@@ -9,11 +9,11 @@ def end_of_motd(instance, *_):
 	Global.instances[instance].can_send.set()
 	Logger.log("c", instance + ": End of motd, joining " + " ".join(Config.config["instances"][instance]))
 	for channel in Config.config["instances"][instance]:
-		Irc.instance_send(instance, "JOIN", channel)
+		Irc.instance_send(instance, ("JOIN", channel))
 hooks["376"] = end_of_motd
 
 def ping(instance, *_):
-	Irc.instance_send(instance, "PONG")
+	Irc.instance_send(instance, ("PONG",), priority = 0)
 hooks["PING"] = ping
 
 class Request(object):
@@ -24,21 +24,33 @@ class Request(object):
 		self.nick = Irc.get_nickname(source)
 		self.text = text
 
-	def privmsg(self, targ, text):
-		Logger.log("c", self.instance + ": %s <- %s " % (targ, text))
+	def privmsg(self, targ, text, priority = None):
+		Logger.log("c", self.instance + ": %s <- (pri=%s) %s " % (targ, str(priority),  text))
 		while len(text) > 350:
-			Irc.instance_send(self.instance, "PRIVMSG", targ, text[:349])
+			if priority:
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]), priority = priority)
+			else:
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]))
 			text = text[350:]
-		Irc.instance_send(self.instance, "PRIVMSG", targ, text)
+		if priority:
+			Irc.instance_send(self.instance, ("PRIVMSG", targ, text), priority = priority)
+		else:
+			Irc.instance_send(self.instance, ("PRIVMSG", targ, text))
 
 	def reply(self, text):
-		self.privmsg(self.target, self.nick + ": " + text)
+		if self.nick == self.target:
+			self.privmsg(self.target, self.nick + ": " + text, priority = 10)
+		else:
+			self.privmsg(self.target, self.nick + ": " + text)
 
 	def reply_private(self, text):
-		self.privmsg(self.nick, self.nick + ": " + text)
+		self.privmsg(self.nick, self.nick + ": " + text, priority = 10)
 
 	def say(self, text):
-		self.privmsg(self.target, text)
+		if self.nick == self.target:
+			self.privmsg(self.target, text, priority = 10)
+		else:
+			self.privmsg(self.target, text)
 
 class FakeRequest(Request):
 	def __init__(self, req, target, text):
@@ -49,12 +61,18 @@ class FakeRequest(Request):
 		self.text = text
 		self.realnick = req.nick
 
-	def privmsg(self, targ, text):
+	def privmsg(self, targ, text, priority = None):
 		Logger.log("c", self.instance + ": %s <- %s " % (targ, text))
 		while len(text) > 350:
-			Irc.instance_send(self.instance, "PRIVMSG", targ, text[:349])
+			if priority:
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]), priority = priority)
+			else:
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]))
 			text = text[350:]
-		Irc.instance_send(self.instance, "PRIVMSG", targ, text)
+		if priority:
+			Irc.instance_send(self.instance, ("PRIVMSG", targ, text), priority = priority)
+		else:
+			Irc.instance_send(self.instance, ("PRIVMSG", targ, text))
 
 	def reply(self, text):
 		self.privmsg(self.target, self.realnick + " [reply] : " + text)
@@ -86,12 +104,12 @@ def message(instance, source, target, text):
 		if changes:
 			hash += "[+]"
 		version = "Doger by mniip, version " + hash
-		Irc.instance_send(instance, "NOTICE", Irc.get_nickname(source), "\x01VERSION " + version + "\x01")
+		Irc.instance_send(instance, ("NOTICE", Irc.get_nickname(source), "\x01VERSION " + version + "\x01"), priority = 20)
 	else:
 		commandline = None
 		if target == instance:
 			commandline = text
-		elif text[0] == Config.config["prefix"]:
+		if text[0] == Config.config["prefix"]:
 			commandline = text[1:]
 		if commandline:
 			if Irc.is_ignored(host):
@@ -103,9 +121,9 @@ def message(instance, source, target, text):
 				score = Global.flood_score.get(host, (t, 0))
 				score = max(score[1] + score[0] - t, 0) + Config.config["ignore"]["cost"]
 				if score > Config.config["ignore"]["limit"] and not Irc.is_admin(source):
-					Logger.log("c", instance + ": Ignoring " + source)
+					Logger.log("c", instance + ": Ignoring " + host)
 					Irc.ignore(host, Config.config["ignore"]["timeout"])
-					Irc.instance_send(instance, "PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds")
+					Irc.instance_send(instance, ("PRIVMSG", Irc.get_nickname(source), "You're sending commands too quickly. Your host is ignored for 240 seconds"))
 					return
 				Global.flood_score[host] = (t, score)
 			src = Irc.get_nickname(source)
@@ -235,17 +253,17 @@ hooks["318"] = whois_end
 
 def cap(instance, _, __, ___, caps):
 	if caps.rstrip(" ") == "sasl":
-		Irc.instance_send_nolock(instance, "AUTHENTICATE", "PLAIN")
+		Irc.instance_send(instance, ("AUTHENTICATE", "PLAIN"), lock = False)
 hooks["CAP"] = cap
 
 def authenticate(instance, _, data):
 	if data == "+":
 		load = Config.config["account"] + "\0" + Config.config["account"] + "\0" + Config.config["password"]
-		Irc.instance_send_nolock(instance, "AUTHENTICATE", load.encode("base64").rstrip("\n"))
+		Irc.instance_send(instance, ("AUTHENTICATE", load.encode("base64").rstrip("\n")), lock = False)
 hooks["AUTHENTICATE"] = authenticate
 
 def sasl_success(instance, _, data, __):
 	Logger.log("c", "Finished authentication")
-	Irc.instance_send_nolock(instance, "CAP", "END")
-	Irc.instance_send_nolock(instance, "CAP", "REQ", "extended-join account-notify")
+	Irc.instance_send(instance, ("CAP", "END"), lock = False)
+	Irc.instance_send(instance, ("CAP", "REQ", "extended-join account-notify"), lock = False)
 hooks["903"] = sasl_success
