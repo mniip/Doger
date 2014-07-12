@@ -159,7 +159,7 @@ def donate(req, arg):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	toacct = "@DONATIONS"
+	toacct = "mniip"
 	try:
 		amount = int(arg[0])
 		if amount <= 0:
@@ -172,6 +172,7 @@ def donate(req, arg):
 		try:
 			Transactions.tip(token, acct, toacct, amount)
 			req.reply("Done [%s]" % (token.id))
+			req.privmsg(toacct, "Such %s donated Ɖ%i [%s]" % (req.nick, amount, token.id), priority = 10)
 		except Transactions.NotEnoughMoney:
 			req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
