@@ -51,15 +51,16 @@ def account_names(nicks):
 	Logger.log("w", "Task: " + " ".join(nicks))
 	for i in range(len(nicks)):
 		found = False
-		for channel in Global.account_cache:
-			for nick in Global.account_cache[channel]:
-				if Global.account_cache[channel][nick] != None and equal_nicks(nick, nicks[i]):
-					results[i] = Global.account_cache[channel][nick]
-					Logger.log("w", "Found %s in cache for %s : %s=%s" % (nicks[i], channel, nick, repr(results[i])))
-					found = True
+		with Global.account_lock:
+			for channel in Global.account_cache:
+				for nick in Global.account_cache[channel]:
+					if Global.account_cache[channel][nick] != None and equal_nicks(nick, nicks[i]):
+						results[i] = Global.account_cache[channel][nick]
+						Logger.log("w", "Found %s in cache for %s : %s=%s" % (nicks[i], channel, nick, repr(results[i])))
+						found = True
+						break
+				if found:
 					break
-			if found:
-				break
 		if not found:
 			queues[i] = Queue.Queue()
 			least = None
@@ -76,11 +77,12 @@ def account_names(nicks):
 	for i in range(len(nicks)):
 		if results[i] == None:
 			account = queues[i].get(True)
-			for channel in Global.account_cache:
-				for nick in Global.account_cache[channel]:
-					if equal_nicks(nick, nicks[i]):
-						Global.account_cache[channel][nick] = account
-						Logger.log("w", "Propagating %s=%s into %s" % (nicks[i], repr(account), channel))
+			with Global.account_lock:
+				for channel in Global.account_cache:
+					for nick in Global.account_cache[channel]:
+						if equal_nicks(nick, nicks[i]):
+							Global.account_cache[channel][nick] = account
+							Logger.log("w", "Propagating %s=%s into %s" % (nicks[i], repr(account), channel))
 			results[i] = account
 	Logger.log("w", "Solution: " + " ".join([repr(x) for x in results]))
 	return results
@@ -92,7 +94,7 @@ def parse(cmd):
 	else:
 		data[0] = data[0][1:]
 	for i in range(1, len(data)):
-		if data[i][0] == ':':
+		if len(data) and data[i][0] == ':':
 			data[i:] = [(" ".join(data[i:]))[1:]]
 			break
 	return data
