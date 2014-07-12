@@ -150,77 +150,84 @@ def join(instance, source, channel, account, _):
 	if account == "*":
 		account = False
 	nick = Irc.get_nickname(source)
-	if nick  == instance:
-		Global.account_cache[channel] = {}
-	Global.account_cache[channel][nick] = account
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			Global.account_cache[channel][nick] = account
-			Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
+	with Global.account_lock:
+		if nick  == instance:
+			Global.account_cache[channel] = {}
+		Global.account_cache[channel][nick] = account
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				Global.account_cache[channel][nick] = account
+				Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
 hooks["JOIN"] = join
 
 def part(instance, source, channel, *_):
 	nick = Irc.get_nickname(source)
-	if nick == instance:
-		del Global.account_cache[channel]
-		Logger.log("w", "Removing cache for " + channel)
-		return
-	if nick in Global.account_cache[channel]:
-		del Global.account_cache[channel][nick]
-		Logger.log("w", "Removing %s from %s" % (nick, channel))
+	with Global.account_lock:
+		if nick == instance:
+			del Global.account_cache[channel]
+			Logger.log("w", "Removing cache for " + channel)
+			return
+		if nick in Global.account_cache[channel]:
+			del Global.account_cache[channel][nick]
+			Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["PART"] = part
 
 def kick(instance, _, channel, nick, *__):
-	if nick == instance:
-		del Global.account_cache[channel]
-		Logger.log("w", "Removing cache for " + channel)
-		return
-	if nick in Global.account_cache[channel]:
-		del Global.account_cache[channel][nick]
-		Logger.log("w", "Removing %s from %s" % (nick, channel))
+	with Global.account_lock:
+		if nick == instance:
+			del Global.account_cache[channel]
+			Logger.log("w", "Removing cache for " + channel)
+			return
+		if nick in Global.account_cache[channel]:
+			del Global.account_cache[channel][nick]
+			Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["KICK"] = kick
 
 def quit(instance, source, _):
 	nick = Irc.get_nickname(source)
-	if nick == instance:
-		chans = []
+	with Global.account_lock:
+		if nick == instance:
+			chans = []
+			for channel in Global.account_cache:
+				if nick in Global.account_cache[channel]:
+					chans.append(channel)
+			for channel in chans:
+					del Global.account_cache[channel]
+					Logger.log("w", "Removing cache for " + channel)
+			return
 		for channel in Global.account_cache:
 			if nick in Global.account_cache[channel]:
-				chans.append(channel)
-		for channel in chans:
-				del Global.account_cache[channel]
-				Logger.log("w", "Removing cache for " + channel)
-		return
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			del Global.account_cache[channel][nick]
-			Logger.log("w", "Removing %s from %s" % (nick, channel))
+				del Global.account_cache[channel][nick]
+				Logger.log("w", "Removing %s from %s" % (nick, channel))
 hooks["QUIT"] = quit
 
 def account(instance, source, account):
 	if account == "*":
 		account = False
 	nick = Irc.get_nickname(source)
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			Global.account_cache[channel][nick] = account
-			Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
+	with Global.account_lock:
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				Global.account_cache[channel][nick] = account
+				Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
 hooks["ACCOUNT"] = account
 
 def _nick(instance, source, newnick):
 	nick = Irc.get_nickname(source)
-	for channel in Global.account_cache:
-		if nick in Global.account_cache[channel]:
-			Global.account_cache[channel][newnick] = Global.account_cache[channel][nick]
-			Logger.log("w", "%s -> %s in %s" % (nick, newnick, channel))
-			del Global.account_cache[channel][nick]
+	with Global.account_lock:
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				Global.account_cache[channel][newnick] = Global.account_cache[channel][nick]
+				Logger.log("w", "%s -> %s in %s" % (nick, newnick, channel))
+				del Global.account_cache[channel][nick]
 hooks["NICK"] = _nick
 
 def names(instance, _, __, eq, channel, names):
 	names = names.split(" ")
-	for n in names:
-		n = Irc.strip_nickname(n)
-		Global.account_cache[channel][n] = None
+	with Global.account_lock:
+		for n in names:
+			n = Irc.strip_nickname(n)
+			Global.account_cache[channel][n] = None
 hooks["353"] = names
 
 def error(instance, *_):

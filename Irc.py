@@ -275,10 +275,13 @@ def manager():
 						Global.instances[cmd[1]].whois_queue.task_done()
 				except Queue.Empty:
 					pass
-				chans = []
-				for channel in Global.account_cache:
-					if cmd[1] in Global.account_cache[channel]:
-						chans.append(channel)
+				with Global.account_lock:
+					chans = []
+					for channel in Global.account_cache:
+						if cmd[1] in Global.account_cache[channel]:
+							chans.append(channel)
+					for channel in chans:
+						del Global.account_cache[channel]
 				if cmd[0] == "Reconnect":
 					connect_instance(cmd[1])
 				else:
