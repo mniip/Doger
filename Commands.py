@@ -154,6 +154,7 @@ def mtip(req, arg):
 commands["mtip"] = mtip
 
 def donate(req, arg):
+	"""%donate <amount> - Donate 'amount' coins to the developers of this bot (mniip)"""
 	if len(arg) < 1:
 		return req.reply(gethelp("donate"))
 	acct = Irc.account_names([req.nick])[0]
@@ -192,13 +193,13 @@ def _help(req, arg):
 			req.reply(h)
 	else:
 		if not Irc.equal_nicks(req.target, req.nick):
-			return req.reply("I'm Doger, an IRC dogecoin tipbot. For more info do /msg Doger help")
+			return req.reply("I'm Doger, an IRC dogecoin tipbot written by mniip. For more info do /msg Doger help")
 		acct = Irc.account_names([req.nick])[0]
 		if acct:
 			ident = "you're identified as \2" + acct + "\2"
 		else:
 			ident = "you're not identified"
-		req.say("I'm Doger, I'm an IRC dogecoin tipbot. To get help about a specific command, say \2%help <command>\2  Commands: %tip %balance %withdraw %deposit %mtip %donate %help".replace("%", Config.config["prefix"]))
+		req.say("I'm Doger, I'm an IRC dogecoin tipbot written by mniip. To get help about a specific command, say \2%help <command>\2  Commands: %tip %balance %withdraw %deposit %mtip %donate %help".replace("%", Config.config["prefix"]))
 		req.say("Note that to receive or send tips you should be identified with freenode services (%s). For any support questions, including those related to lost coins, join ##doger" % (ident))
 commands["help"] = _help
 
