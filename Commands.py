@@ -27,7 +27,7 @@ def deposit(req, _):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
-	req.reply("To deposit, send coins to %s (transactions will be credited after %d confirmations)" % (Transactions.deposit_address(acct), Config.config["confirmations"]))
+	req.reply_private("To deposit, send coins to %s (transactions will be credited after %d confirmations)" % (Transactions.deposit_address(acct), Config.config["confirmations"]))
 commands["deposit"] = deposit
 
 def withdraw(req, arg):
@@ -260,6 +260,6 @@ def _as(req, arg):
 			if cmd:
 				req = Hooks.FakeRequest(req, target, text)
 				Hooks.run_command(cmd, req, args)
-	if Global.account_cache[""]:
+	if Global.account_cache.get("", None):
 		del Global.account_cache[""]
 commands["as"] = _as
