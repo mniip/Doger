@@ -211,9 +211,9 @@ def admin(req, arg):
 			for mod in arg:
 				reload(sys.modules[mod])
 			return req.reply("Done")
-		elif command == "exec":
-			exec(" ".join(arg).replace("$", "\n"))
-			return
+#		elif command == "exec":
+#			exec(" ".join(arg).replace("$", "\n"))
+#			return
 		elif command == "ignore":
 			Irc.ignore(arg[0], int(arg[1]))
 			req.reply("Ignored")
@@ -259,4 +259,6 @@ def _as(req, arg):
 			if cmd:
 				req = Hooks.FakeRequest(req, target, text)
 				Hooks.run_command(cmd, req, args)
+	if Global.account_cache[""]:
+		del Global.account_cache[""]
 commands["as"] = _as
