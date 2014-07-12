@@ -9,10 +9,6 @@ def ping(req, _):
 	req.reply("Pong")
 commands["ping"] = ping
 
-def test(req, arg):
-	req.reply(repr(Irc.account_names(arg)))
-commands["test"] = test
-
 def balance(req, _):
 	"""%balance - Displays your confirmed and unconfirmed balance"""
 	acct = Irc.account_names([req.nick])[0]
@@ -205,44 +201,44 @@ def _help(req, arg):
 		req.say("Note that to receive or send tips you should be identified with freenode services (%s). For any support questions, including those related to lost coins, join ##doger" % (ident))
 commands["help"] = _help
 
-def load(req, arg):
+def admin(req, arg):
 	"""
 	admin"""
-	for mod in arg:
-		reload(sys.modules[mod])
-	req.reply("Done")
-commands["reload"] = load
-
-def _exec(req, arg):
-	"""
-	admin"""
-	exec(" ".join(arg).replace("$", "\n"))
-commands["exec"] = _exec
-
-def ignore(req, arg):
-	"""
-	admin"""
-	Irc.ignore(arg[0], int(arg[1]))
-commands["ignore"] = ignore
-
-def die(req, arg):
-	"""
-	admin"""
-	if arg[0] == "exec":
-		for instance in Global.instances:
-			Global.manager_queue.put(("Disconnect", instance))
-		Global.manager_queue.join()
-		Transactions.stop()
-		os.execv(sys.executable, [sys.executable] + sys.argv)
-	elif arg[0] == "thread":
-		Global.manager_queue.put(("Reconnect", req.instance))
-	else:
-		for instance in Global.instances:
-			Global.manager_queue.put(("Disconnect", instance))
-		Global.manager_queue.join()
-		Transactions.stop()
-		Global.manager_queue.put(("Die",))
-commands["die"] = die
+	if len(arg):
+		command = arg[0]
+		arg = arg[1:]
+		if command == "reload":
+			for mod in arg:
+				reload(sys.modules[mod])
+			return req.reply("Done")
+		elif command == "exec":
+			exec(" ".join(arg).replace("$", "\n"))
+			return
+		elif command == "ignore":
+			Irc.ignore(arg[0], int(arg[1]))
+			req.reply("Ignored")
+		elif command == "die":
+			for instance in Global.instances:
+				Global.manager_queue.put(("Disconnect", instance))
+			Global.manager_queue.join()
+			Transactions.stop()
+			Global.manager_queue.put(("Die",))
+		elif command == "restart":
+			for instance in Global.instances:
+				Global.manager_queue.put(("Disconnect", instance))
+			Global.manager_queue.join()
+			Transactions.stop()
+			os.execv(sys.executable, [sys.executable] + sys.argv)
+		elif command == "manager":
+			for cmd in arg:
+				Global.manager_queue.put(cmd.split("$"))
+		elif command == "raw":
+			Irc.instance_send(req.instance, eval(" ".join(arg)))
+		elif command == "join":
+			Irc.instance_send(req.instance, ("JOIN", arg[0]), priority = 0.1)
+		elif command == "part":
+			Irc.instance_send(req.instance, ("PART", arg[0]), priority = 0.1)
+commands["admin"] = admin
 
 def _as(req, arg):
 	"""
