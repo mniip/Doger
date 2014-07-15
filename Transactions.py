@@ -123,6 +123,7 @@ def tip(token, source, target, amount):
 def tip_multiple(token, source, dict):
 	db = connect()
 	cur = db.cursor()
+	spent = 0
 	for target in dict:
 		amount = dict[target]
 		token.log("t", "tipping %d from %s to %s" % (amount, source, target))
@@ -134,13 +135,13 @@ def tip_multiple(token, source, dict):
 		if not cur.rowcount:
 			token.log("te", "not enough money")
 			raise NotEnoughMoney()
-		token.log("t", "{%s - %d}" % (source, amount))
+		spent += amount
 		cur.execute("UPDATE accounts SET balance = balance + %s WHERE account = %s", (amount, target)) 
-		if cur.rowcount:
-			token.log("t", "{%s + %d}" % (target, amount))
-		else:
+		if not cur.rowcount:
 			cur.execute("INSERT INTO accounts VALUES (%s, %s)", (target, amount))
-			token.log("t", "no rows affected {%s = %d}" % (target, amount))
+	token.log("t", "{%s - %d}" % (source, spent))
+	for target in dict:
+		token.log("t", "{%s + %d}" % (target, dict[target]))
 	db.commit()
 
 def withdraw(token, account, address, amount): 
