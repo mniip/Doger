@@ -1,6 +1,6 @@
 # coding=utf8
 import sys, os, time
-import Irc, Transactions, Logger, Global, Hooks, Config
+import Irc, Transactions, Blocknotify, Logger, Global, Hooks, Config
 
 commands = {}
 
@@ -37,6 +37,8 @@ def withdraw(req, arg):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	if Transactions.lock(acct):
+		return req.reply_private("Your account is currently locked")
 	if len(arg) == 1:
 		amount = max(Transactions.balance(acct) - 1, 1)
 	else:
@@ -69,6 +71,8 @@ def tip(req, arg):
 	acct, toacct = Irc.account_names([req.nick, to])
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	if Transactions.lock(acct):
+		return req.reply_private("Your account is currently locked")
 	if not toacct:
 		if toacct == None:
 			return req.reply_private(to + " is not online")
@@ -101,6 +105,8 @@ def mtip(req, arg):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	if Transactions.lock(acct):
+		return req.reply_private("Your account is currently locked")
 	for i in range(0, len(arg), 2):
 		try:
 			if int(arg[i + 1]) <= 0:
@@ -160,6 +166,8 @@ def donate(req, arg):
 	acct = Irc.account_names([req.nick])[0]
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
+	if Transactions.lock(acct):
+		return req.reply_private("Your account is currently locked")
 	toacct = "mniip"
 	try:
 		amount = int(arg[0])
@@ -212,7 +220,7 @@ def admin(req, arg):
 		if command == "reload":
 			for mod in arg:
 				reload(sys.modules[mod])
-			req.reply("Done")
+			req.reply("Reloaded")
 #		elif command == "exec":
 #			exec(" ".join(arg).replace("$", "\n"))
 		elif command == "ignore":
@@ -222,17 +230,18 @@ def admin(req, arg):
 			for instance in Global.instances:
 				Global.manager_queue.put(("Disconnect", instance))
 			Global.manager_queue.join()
-			Transactions.stop()
+			Blocknotify.stop()
 			Global.manager_queue.put(("Die",))
 		elif command == "restart":
 			for instance in Global.instances:
 				Global.manager_queue.put(("Disconnect", instance))
 			Global.manager_queue.join()
-			Transactions.stop()
+			Blocknotify.stop()
 			os.execv(sys.executable, [sys.executable] + sys.argv)
 		elif command == "manager":
 			for cmd in arg:
 				Global.manager_queue.put(cmd.split("$"))
+			req.reply("Sent")
 		elif command == "raw":
 			Irc.instance_send(req.instance, eval(" ".join(arg)))
 		elif command == "join":
@@ -271,7 +280,17 @@ def admin(req, arg):
 			req.reply("Instances:" + inss)
 		elif command == "balances":
 			database, dogecoind = Transactions.balances()
-			req.reply("Dogecoind: %.9f; Database: %.9f" % (dogecoind, database))
+			req.reply("Dogecoind: %.8f; Database: %.8f" % (dogecoind, database))
+		elif command == "lock":
+			if len(arg) > 1:
+				if arg[1] == "on":
+					Transactions.lock(arg[0], True)
+				elif arg[1] == "off":
+					Transactions.lock(arg[0], False)
+				req.reply("Done")
+			elif len(arg):
+				req.reply("locked" if Transactions.lock(arg[0]) else "not locked")
+
 commands["admin"] = admin
 
 def _as(req, arg):

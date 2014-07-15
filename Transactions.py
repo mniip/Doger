@@ -1,6 +1,6 @@
-import sys, os, threading, pyinotify, traceback
+import sys, os, threading, traceback
 import dogecoinrpc, dogecoinrpc.connection, psycopg2
-import Config, Logger
+import Config, Logger, Blocknotify
 
 conn = dogecoinrpc.connect_to_local()
 rpclock = threading.Lock()
@@ -12,29 +12,6 @@ cur = connect().cursor()
 cur.execute("SELECT block FROM lastblock")
 lastblock = cur.fetchone()[0]
 del cur
-
-blocklock = threading.Lock()
-watcher = pyinotify.WatchManager()
-class Inotifier(pyinotify.ProcessEvent):
-	def process_IN_CREATE(self, event):
-		try:
-			with blocklock:
-				notify_block()
-		except Exception as e:
-			type, value, tb = sys.exc_info()
-			Logger.log("te", "ERROR in blocknotify")
-			Logger.log("te", repr(e))
-			Logger.log("te", "".join(traceback.format_tb(tb)))
-		try:
-			os.remove(os.path.join(event.path, event.name))
-		except:
-			pass
-notifier = pyinotify.ThreadedNotifier(watcher, Inotifier())
-wdd = watcher.add_watch("blocknotify", pyinotify.EventsCodes.ALL_FLAGS["IN_CREATE"])
-notifier.start()
-
-def stop():
-	notifier.stop()
 
 class NotEnoughMoney(Exception):
 	pass
@@ -81,12 +58,6 @@ def notify_block():
 	cur.execute("UPDATE lastblock SET block = %s", (lb["lastblock"],))
 	db.commit()
 	lastblock = lb["lastblock"]
-
-notify_block()
-try:
-	os.remove("blocknotify/blocknotify")
-except OSError:
-	pass
 
 def balance(account): 
 	cur = connect().cursor()
@@ -150,7 +121,6 @@ def withdraw(token, account, address, amount):
 	token.log("t", "withdrawing %d from %s to %s" % (amount, account, address))
 	try:
 		cur.execute("UPDATE accounts SET balance = balance - %s WHERE account = %s", (amount + 1, account))
-		token.log("t", "{%s - %d}" % (account, amount))
 	except psycopg2.IntegrityError as e:
 		token.log("te", "not enough money")
 		raise NotEnoughMoney()
@@ -161,8 +131,10 @@ def withdraw(token, account, address, amount):
 		with rpclock:
 		 	tx = conn.sendtoaddress(address, amount, comment = "sent with Doger")
 	except Exception as e:
-		token.log("te", "error")
+		token.log("te", "error, locking account")
+		lock(account, True)
 		raise e
+	token.log("t", "{%s - %d}" % (account, amount))
 	db.commit()
 	token.log("t", "TX id is %s" % (tx.encode("ascii")))
 	return tx.encode("ascii")
@@ -196,3 +168,23 @@ def balances():
 	with rpclock:
 		dogecoind = float(conn.getbalance(minconf = Config.config["confirmations"]))
 	return (database, dogecoind)
+
+def lock(account, state = None):
+	if state == None:
+		cur = connect().cursor()
+		cur.execute("SELECT * FROM locked WHERE account = %s", (account,))
+		return not not cur.rowcount
+	elif state == True:
+		db = connect()
+		cur = db.cursor()
+		try:
+			cur.execute("INSERT INTO locked VALUES (%s)", (account,))
+			db.commit()
+		except psycopg2.IntegrityError as e:
+			pass
+	elif state == False:
+		db = connect()
+		cur = db.cursor()
+		cur.execute("DELETE FROM locked WHERE account = %s", (account,))
+		db.commit()
+
