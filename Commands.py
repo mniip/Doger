@@ -212,10 +212,9 @@ def admin(req, arg):
 		if command == "reload":
 			for mod in arg:
 				reload(sys.modules[mod])
-			return req.reply("Done")
+			req.reply("Done")
 #		elif command == "exec":
 #			exec(" ".join(arg).replace("$", "\n"))
-#			return
 		elif command == "ignore":
 			Irc.ignore(arg[0], int(arg[1]))
 			req.reply("Ignored")
@@ -240,6 +239,39 @@ def admin(req, arg):
 			Irc.instance_send(req.instance, ("JOIN", arg[0]), priority = 0.1)
 		elif command == "part":
 			Irc.instance_send(req.instance, ("PART", arg[0]), priority = 0.1)
+		elif command == "caches":
+			acsize = 0
+			accached = 0
+			with Global.account_lock:
+				for channel in Global.account_cache:
+					for user in Global.account_cache[channel]:
+						acsize += 1
+						if Global.account_cache[channel][user] != None:
+							accached += 1
+			acchannels = len(Global.account_cache)
+			whois = " OK"
+			whoisok = True
+			for instance in Global.instances:
+				tasks = Global.instances[instance].whois_queue.unfinished_tasks
+				if tasks:
+					if whoisok:
+						whois = ""
+						whoisok = False
+					whois += " %s:%d!" % (instance, tasks)
+			req.reply("Account caches: %d user-channels (%d cached) in %d channels; Whois queues:%s" % (acsize, accached, acchannels, whois))
+		elif command == "channels":
+			inss = ""
+			for instance in Global.instances:
+				chans = []
+				with Global.account_lock:
+					for channel in Global.account_cache:
+						if instance in Global.account_cache[channel]:
+							chans.append(channel)
+				inss += " %s:%s" % (instance, ",".join(chans))
+			req.reply("Instances:" + inss)
+		elif command == "balances":
+			database, dogecoind = Transactions.balances()
+			req.reply("Dogecoind: %.9f; Database: %.9f" % (dogecoind, database))
 commands["admin"] = admin
 
 def _as(req, arg):

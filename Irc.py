@@ -94,7 +94,7 @@ def parse(cmd):
 	else:
 		data[0] = data[0][1:]
 	for i in range(1, len(data)):
-		if len(data) and data[i][0] == ':':
+		if len(data[i]) and data[i][0] == ':':
 			data[i:] = [(" ".join(data[i:]))[1:]]
 			break
 	return data

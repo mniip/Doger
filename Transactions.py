@@ -187,3 +187,11 @@ def deposit_address(account):
 def verify_address(address):
 	with rpclock:
 		return conn.validateaddress(address).isvalid
+
+def balances():
+	cur = connect().cursor()
+	cur.execute("SELECT SUM(balance) FROM accounts")
+	database = float(cur.fetchone()[0])
+	with rpclock:
+		dogecoind = float(conn.getbalance(minconf = Config.config["confirmations"]))
+	return (database, dogecoind)
