@@ -162,9 +162,9 @@ def verify_address(address):
 def balances():
 	cur = database().cursor()
 	cur.execute("SELECT SUM(balance) FROM accounts")
-	database = float(cur.fetchone()[0])
+	db = float(cur.fetchone()[0])
 	dogecoind = float(daemon().getbalance(minconf = Config.config["confirmations"]))
-	return (database, dogecoind)
+	return (db, dogecoind)
 
 def lock(account, state = None):
 	if state == None:
