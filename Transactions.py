@@ -131,6 +131,7 @@ def withdraw(token, account, address, amount):
 		raise
 	except:
 		token.log("te", "error, locking account")
+		Logger.irclog("Emergency lock on account '%s'" % (account))
 		lock(account, True)
 		raise
 	token.log("t", "{%s - %d}" % (account, amount))

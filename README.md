@@ -41,6 +41,8 @@ config = {
 #		"timeout": 240 # ignore length
 #	},
 	"logfile": "path/to/log",
+# optional:
+#	"irclog": ("nick1", "#logchannel"),
 	"database": "name of pgsql database"
 }
 ```

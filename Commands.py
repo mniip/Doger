@@ -61,6 +61,7 @@ def withdraw(req, arg):
 			req.reply_private("You tried to withdraw Ɖ%i (+Ɖ1 TX fee) but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 		except Transactions.InsufficientFunds:
 			req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
+			Logger.irclog("InsufficientFunds while executing '%s' from '%s'" % (req.text, req.nick))
 commands["withdraw"] = withdraw
 
 def tip(req, arg):

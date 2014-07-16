@@ -26,16 +26,11 @@ class Request(object):
 
 	def privmsg(self, targ, text, priority = None):
 		Logger.log("c", self.instance + ": %s <- (pri=%s) %s " % (targ, str(priority),  text))
-		while len(text) > 350:
+		for i in xrange(0, len(text), 350):
 			if priority:
-				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]), priority = priority)
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[i:i+350]), priority = priority)
 			else:
-				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]))
-			text = text[350:]
-		if priority:
-			Irc.instance_send(self.instance, ("PRIVMSG", targ, text), priority = priority)
-		else:
-			Irc.instance_send(self.instance, ("PRIVMSG", targ, text))
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[i:i+350]))
 
 	def reply(self, text):
 		if self.nick == self.target:
@@ -63,16 +58,11 @@ class FakeRequest(Request):
 
 	def privmsg(self, targ, text, priority = None):
 		Logger.log("c", self.instance + ": %s <- %s " % (targ, text))
-		while len(text) > 350:
+		for i in xrange(0, len(text), 350):
 			if priority:
-				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]), priority = priority)
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[i:i+350]), priority = priority)
 			else:
-				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[:349]))
-			text = text[350:]
-		if priority:
-			Irc.instance_send(self.instance, ("PRIVMSG", targ, text), priority = priority)
-		else:
-			Irc.instance_send(self.instance, ("PRIVMSG", targ, text))
+				Irc.instance_send(self.instance, ("PRIVMSG", targ, text[i:i+350]))
 
 	def reply(self, text):
 		self.privmsg(self.target, self.realnick + " [reply] : " + text)
@@ -92,6 +82,8 @@ def run_command(cmd, req, arg):
 		Logger.log("ce", "ERROR in " + req.instance + " : " + req.text)
 		Logger.log("ce", repr(e))
 		Logger.log("ce", "".join(traceback.format_tb(tb)))
+		Logger.irclog("Error while executing '%s' from '%s': %s" % (req.text, req.nick, repr(e)))
+		Logger.irclog("".join(traceback.format_tb(tb)).replace("\n", " || "))
 
 def message(instance, source, target, text):
 	host = Irc.get_host(source)
