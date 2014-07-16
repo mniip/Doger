@@ -2,13 +2,13 @@ import sys, os, threading, traceback
 import dogecoinrpc, dogecoinrpc.connection, psycopg2
 import Config, Logger, Blocknotify
 
-conn = dogecoinrpc.connect_to_local()
-rpclock = threading.Lock()
-
-def connect():
+def database():
 	return psycopg2.connect(database = Config.config["database"])
 
-cur = connect().cursor()
+def daemon():
+	return dogecoinrpc.connect_to_local()
+
+cur = database().cursor()
 cur.execute("SELECT block FROM lastblock")
 lastblock = cur.fetchone()[0]
 del cur
@@ -25,19 +25,16 @@ def patchedlistsinceblock(self, block_hash, minconf=1):
 	res['transactions'] = [dogecoinrpc.connection.TransactionInfo(**x) for x in res['transactions']]
 	return res
 try:
-	with rpclock:
-		conn.listsinceblock("0", 1)
+	daemon().listsinceblock("0", 1)
 except TypeError:
 	dogecoinrpc.connection.DogecoinConnection.listsinceblock = patchedlistsinceblock
-	conn = dogecoinrpc.connect_to_local()
 
 # Enf of monkey-patching
 
 def notify_block(): 
 	global lastblock, unconfirmed
-	with rpclock:
-		lb = conn.listsinceblock(lastblock, Config.config["confirmations"])
-	db = connect()
+	lb = daemon().listsinceblock(lastblock, Config.config["confirmations"])
+	db = database()
 	cur = db.cursor()
 	txlist = [(int(tx.amount), tx.address) for tx in lb["transactions"] if tx.category == "receive" and tx.confirmations >= Config.config["confirmations"]]
 	if len(txlist):
@@ -60,7 +57,7 @@ def notify_block():
 	lastblock = lb["lastblock"]
 
 def balance(account): 
-	cur = connect().cursor()
+	cur = database().cursor()
 	cur.execute("SELECT balance FROM accounts WHERE account = %s", (account,))
 	if cur.rowcount:
 		return cur.fetchone()[0]
@@ -71,7 +68,7 @@ def balance_unconfirmed(account):
 	return unconfirmed.get(account, 0)
 
 def tip(token, source, target, amount): 
-	db = connect()
+	db = database()
 	cur = db.cursor()
 	token.log("t", "tipping %d from %s to %s" % (amount, source, target))
 	try:
@@ -92,7 +89,7 @@ def tip(token, source, target, amount):
 	db.commit()
 
 def tip_multiple(token, source, dict):
-	db = connect()
+	db = database()
 	cur = db.cursor()
 	spent = 0
 	for target in dict:
@@ -116,7 +113,7 @@ def tip_multiple(token, source, dict):
 	db.commit()
 
 def withdraw(token, account, address, amount): 
-	db = connect()
+	db = database()
 	cur = db.cursor()
 	token.log("t", "withdrawing %d from %s to %s" % (amount, account, address))
 	try:
@@ -128,25 +125,26 @@ def withdraw(token, account, address, amount):
 		token.log("te", "not enough money")
 		raise NotEnoughMoney()
 	try:
-		with rpclock:
-		 	tx = conn.sendtoaddress(address, amount, comment = "sent with Doger")
-	except Exception as e:
+		tx = daemon().sendtoaddress(address, amount, comment = "sent with Doger")
+	except InsufficientFunds:
+		token.log("te", "insufficient funds")
+		raise
+	except:
 		token.log("te", "error, locking account")
 		lock(account, True)
-		raise e
+		raise
 	token.log("t", "{%s - %d}" % (account, amount))
 	db.commit()
 	token.log("t", "TX id is %s" % (tx.encode("ascii")))
 	return tx.encode("ascii")
 
 def deposit_address(account): 
-	db = connect()
+	db = database()
 	cur = db.cursor()
 	cur.execute("SELECT address FROM address_account WHERE used = '0' AND account = %s LIMIT 1", (account,))
 	if cur.rowcount:
 		return cur.fetchone()[0]
-	with rpclock:
-		addr = conn.getnewaddress()
+	addr = daemon().getnewaddress()
 	try:
 		cur.execute("SELECT * FROM accounts WHERE account = %s", (account,))
 		if not cur.rowcount:
@@ -158,24 +156,22 @@ def deposit_address(account):
 	return addr.encode("ascii")
 
 def verify_address(address):
-	with rpclock:
-		return conn.validateaddress(address).isvalid
+	return daemon().validateaddress(address).isvalid
 
 def balances():
-	cur = connect().cursor()
+	cur = database().cursor()
 	cur.execute("SELECT SUM(balance) FROM accounts")
 	database = float(cur.fetchone()[0])
-	with rpclock:
-		dogecoind = float(conn.getbalance(minconf = Config.config["confirmations"]))
+	dogecoind = float(daemon().getbalance(minconf = Config.config["confirmations"]))
 	return (database, dogecoind)
 
 def lock(account, state = None):
 	if state == None:
-		cur = connect().cursor()
+		cur = database().cursor()
 		cur.execute("SELECT * FROM locked WHERE account = %s", (account,))
 		return not not cur.rowcount
 	elif state == True:
-		db = connect()
+		db = database()
 		cur = db.cursor()
 		try:
 			cur.execute("INSERT INTO locked VALUES (%s)", (account,))
@@ -183,7 +179,7 @@ def lock(account, state = None):
 		except psycopg2.IntegrityError as e:
 			pass
 	elif state == False:
-		db = connect()
+		db = database()
 		cur = db.cursor()
 		cur.execute("DELETE FROM locked WHERE account = %s", (account,))
 		db.commit()
