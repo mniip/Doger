@@ -222,14 +222,27 @@ def instance_send(instance, args, priority = 1, lock = True):
 		Global.instances[instance].can_send.wait()
 	Global.instances[instance].send_queue.put((priority, time.time(), args))
 
+def reconnect_later(t, instance):
+	time.sleep(t)
+	Global.manager_queue.put(("Spawn", instance))
+
 def connect_instance(instance):
 	Logger.log("c", instance + ": Connecting")
-	host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	if Config.config.get("ssl", None):
-		sock = ssl.wrap_socket(sock, ca_certs = Config.config["ssl"]["certs"], cert_reqs = ssl.CERT_REQUIRED)
-	sock.connect((host, Config.config["port"]))
-	sock.settimeout(0.1)
+	try:
+		host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		if Config.config.get("ssl", None):
+			sock = ssl.wrap_socket(sock, ca_certs = Config.config["ssl"]["certs"], cert_reqs = ssl.CERT_REQUIRED)
+		sock.connect((host, Config.config["port"]))
+		sock.settimeout(0.1)
+	except socket.error as e:
+		type, value, tb = sys.exc_info()
+		Logger.log("me", "ERROR in while connecting " + instance)
+		Logger.log("me", repr(e))
+		Logger.log("me", "".join(traceback.format_tb(tb)))
+		del Global.instances[instance]
+		threading.Thread(target = reconnect_later, args = (60, instance)).start()
+		return
 	writer = threading.Thread(target = writer_thread, args = (instance, sock))
 	reader = threading.Thread(target = reader_thread, args = (instance, sock))
 	Global.instances[instance].reader_dying.clear()
