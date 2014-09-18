@@ -166,6 +166,10 @@ def balances():
 	dogecoind = float(daemon().getbalance(minconf = Config.config["confirmations"]))
 	return (db, dogecoind)
 
+def get_info():
+	info = daemon().getinfo()
+	return (info, daemon().getblockhash(info.blocks))
+
 def lock(account, state = None):
 	if state == None:
 		cur = database().cursor()
