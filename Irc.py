@@ -276,6 +276,8 @@ def manager():
 				Logger.log("m", "Waiting for writer")
 				Global.instances[cmd[1]].writer_dead.wait()
 				Logger.log("m", "Emptying send queue")
+				Global.instances[cmd[1]].error_lock.acquire(False)
+				Global.instances[cmd[1]].error_lock.release()
 				try:
 					while True:
 						Global.instances[cmd[1]].send_queue.get(False)
