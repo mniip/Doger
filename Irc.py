@@ -237,7 +237,7 @@ def connect_instance(instance):
 		sock.settimeout(0.1)
 	except socket.error as e:
 		type, value, tb = sys.exc_info()
-		Logger.log("me", "ERROR in while connecting " + instance)
+		Logger.log("me", "ERROR while connecting " + instance)
 		Logger.log("me", repr(e))
 		Logger.log("me", "".join(traceback.format_tb(tb)))
 		del Global.instances[instance]

@@ -7,6 +7,7 @@ IRC tip bot in python.
 
 - **RPC library** - From [here](https://github.com/jcsaaddupuy/dogecoin-python) or pypi.
 - **Dogecoind** - From [here](https://github.com/dogecoin/dogecoin/), you need the `dogecoind` binary.
+- **Postgres** - From [here](http://www.postgresql.org/), python binding from [here](https://pypi.python.org/pypi/psycopg2)
 - **Python** - Obviously.
 
 **Setup:**
@@ -65,6 +66,7 @@ CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DE
 CREATE TABLE address_account (address character varying(34) NOT NULL, account character varying(16), used bit(1) DEFAULT B'0'::"bit" NOT NULL);
 CREATE TABLE locked (account character varying(16));
 CREATE TABLE lastblock (block character varying(64));
+CREATE TABLE txlog (timestamp double precision, token character varying(8), transaction character varying(64), source character varying(16), destination character varying(16), amount bigint);
 INSERT INTO lastblock VALUES ('0');
 ALTER TABLE ONLY accounts ADD CONSTRAINT accounts_pkey PRIMARY KEY (account);
 ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_pkey PRIMARY KEY (address);

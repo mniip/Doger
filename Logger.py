@@ -17,22 +17,8 @@ def irclog(text):
 		for i in xrange(0, len(text), 350):
 			Irc.instance_send(Config.config["irclog"][0], ("PRIVMSG", Config.config["irclog"][1], text[i:i+300]), priority = 0)
 
-class Token():
-	def __init__(self, id):
-		self.id = id
-
-	def __enter__(self):
-		log("t", "[%s] Created" % (self.id))
-		return self
-
-	def __exit__(self, _, __, ___):
-		log("t", "[%s] Destroyed" % (self.id))
-
-	def log(self, spec, text):
-		log(spec, "[%s] %s" % (self.id, text))
-
 def token():
 	m = md5.new()
 	t = random.random()
 	m.update(str(t))
-	return Token(m.hexdigest()[:8])
+	return m.hexdigest()[:8]

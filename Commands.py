@@ -60,15 +60,15 @@ def withdraw(req, arg):
 	to = arg[0]
 	if not Transactions.verify_address(to):
 		return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
-	with Logger.token() as token:
-		try:
-			tx = Transactions.withdraw(token, acct, to, amount)
-			req.reply("Coins have been sent, see http://dogechain.info/tx/%s [%s]" % (tx, token.id))
-		except Transactions.NotEnoughMoney:
-			req.reply_private("You tried to withdraw Ɖ%i (+Ɖ1 TX fee) but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
-		except Transactions.InsufficientFunds:
-			req.reply("Something went wrong, report this to mniip [%s]" % (token.id))
-			Logger.irclog("InsufficientFunds while executing '%s' from '%s'" % (req.text, req.nick))
+	token = Logger.token()
+	try:
+		tx = Transactions.withdraw(token, acct, to, amount)
+		req.reply("Coins have been sent, see http://dogechain.info/tx/%s [%s]" % (tx, token))
+	except Transactions.NotEnoughMoney:
+		req.reply_private("You tried to withdraw Ɖ%i (+Ɖ1 TX fee) but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
+	except Transactions.InsufficientFunds:
+		req.reply("Something went wrong, report this to mniip [%s]" % (token))
+		Logger.irclog("InsufficientFunds while executing '%s' from '%s'" % (req.text, req.nick))
 commands["withdraw"] = withdraw
 
 def tip(req, arg):
@@ -101,16 +101,16 @@ def tip(req, arg):
 	if not int(amount) == amount:
 		return req.reply_private(repr(arg[1]) + " - invalid amount (should be integer)")
 	amount = int(amount)
-	with Logger.token() as token:
-		try:
-			Transactions.tip(token, acct, toacct, amount)
-			if Irc.equal_nicks(req.nick, req.target):
-				req.reply("Done [%s]" % (token.id))
-			else:
-				req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token.id))
-			req.privmsg(to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token.id), priority = 10)
-		except Transactions.NotEnoughMoney:
-			req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
+	token = Logger.token()
+	try:
+		Transactions.tip(token, acct, toacct, amount)
+		if Irc.equal_nicks(req.nick, req.target):
+			req.reply("Done [%s]" % (token))
+		else:
+			req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token))
+		req.privmsg(to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token), priority = 10)
+	except Transactions.NotEnoughMoney:
+		req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["tip"] = tip
 
 def mtip(req, arg):
@@ -169,12 +169,12 @@ def mtip(req, arg):
 			failed += " %s (offline)" % (targets[i])
 		else:
 			failed += " %s (unidentified)" % (targets[i])
-	with Logger.token() as token:
-		try:
-			Transactions.tip_multiple(token, acct, totip)
-			tipped += " [%s]" % (token.id)
-		except Transactions.NotEnoughMoney:
-			return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, Transactions.balance(acct)))
+	token = Logger.token()
+	try:
+		Transactions.tip_multiple(token, acct, totip)
+		tipped += " [%s]" % (token)
+	except Transactions.NotEnoughMoney:
+		return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, Transactions.balance(acct)))
 	output = "Tipped:" + tipped
 	if len(failed):
 		output += "  Failed:" + failed
@@ -206,13 +206,13 @@ def donate(req, arg):
 	if not int(amount) == amount:
 		return req.reply_private(repr(arg[0]) + " - invalid amount (should be integer)")
 	amount = int(amount)
-	with Logger.token() as token:
-		try:
-			Transactions.tip(token, acct, toacct, amount)
-			req.reply("Done [%s]" % (token.id))
-			req.privmsg(toacct, "Such %s donated Ɖ%i [%s]" % (req.nick, amount, token.id), priority = 10)
-		except Transactions.NotEnoughMoney:
-			req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
+	token = Logger.token()
+	try:
+		Transactions.tip(token, acct, toacct, amount)
+		req.reply("Donated Ɖ%i [%s]" % (amount, token))
+		req.privmsg(toacct, "Such %s donated Ɖ%i [%s]" % (req.nick, amount, token), priority = 10)
+	except Transactions.NotEnoughMoney:
+		req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
 
 def gethelp(name):
