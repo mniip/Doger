@@ -71,6 +71,7 @@ def balance_unconfirmed(account):
 def tip(token, source, target, amount): 
 	db = database()
 	cur = db.cursor()
+	cur.execute("SELECT * FROM accounts WHERE account = ANY(%s) FOR UPDATE", (sorted([target, source]),))
 	try:
 		cur.execute("UPDATE accounts SET balance = balance - %s WHERE account = %s", (amount, source))
 	except psycopg2.IntegrityError as e:
@@ -86,6 +87,7 @@ def tip(token, source, target, amount):
 def tip_multiple(token, source, dict):
 	db = database()
 	cur = db.cursor()
+	cur.execute("SELECT * FROM accounts WHERE account = ANY(%s) FOR UPDATE", (sorted(dict.keys() + [source]),))
 	spent = 0
 	for target in dict:
 		amount = dict[target]
