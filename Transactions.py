@@ -175,4 +175,3 @@ def lock(account, state = None):
 		cur = db.cursor()
 		cur.execute("DELETE FROM locked WHERE account = %s", (account,))
 		db.commit()
-

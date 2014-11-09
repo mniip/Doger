@@ -223,7 +223,9 @@ def instance_send(instance, args, priority = 1, lock = True):
 	Global.instances[instance].send_queue.put((priority, time.time(), args))
 
 def reconnect_later(t, instance):
+	Logger.log("m", "Reconnecting " + instance + " in 60 seconds")
 	time.sleep(t)
+	Logger.log("m", "Reconnecting " + instance)
 	Global.manager_queue.put(("Spawn", instance))
 
 def connect_instance(instance):
