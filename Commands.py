@@ -1,5 +1,5 @@
 # coding=utf8
-import sys, os, time, math
+import sys, os, time, math, pprint
 import Irc, Transactions, Blocknotify, Logger, Global, Hooks, Config
 
 commands = {}
@@ -273,6 +273,21 @@ def admin(req, arg):
 			req.reply("Sent")
 		elif command == "raw":
 			Irc.instance_send(req.instance, eval(" ".join(arg)))
+		elif command == "config":
+			if arg[0] == "save":
+				os.rename("Config.py", "Config.py.bak")
+				with open("Config.py", "w") as f:
+					f.write("config = " + pprint.pformat(Config.config) + "\n")
+				req.reply("Done")
+			elif arg[0] == "del":
+				exec("del Config.config " + " ".join(arg[1:]))
+				req.reply("Done")
+			else:
+				try:
+					req.reply(repr(eval("Config.config " + " ".join(arg))))
+				except SyntaxError:
+					exec("Config.config " + " ".join(arg))
+					req.reply("Done")
 		elif command == "join":
 			Irc.instance_send(req.instance, ("JOIN", arg[0]), priority = 0.1)
 		elif command == "part":
