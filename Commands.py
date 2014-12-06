@@ -30,6 +30,24 @@ def deposit(req, _):
 	req.reply_private("To deposit, send coins to %s (transactions will be credited after %d confirmations)" % (Transactions.deposit_address(acct), Config.config["confirmations"]))
 commands["deposit"] = deposit
 
+def parse_amount(s, acct, all_offset = 0):
+	if s.lower() == "all":
+		return max(Transactions.balance(acct) + all_offset, 1)
+	else:
+		try:
+			amount = float(s)
+			if math.isnan(amount):
+				raise ValueError
+		except ValueError:
+			raise ValueError(repr(s) + " - invalid amount")
+		if amount > 1e12:
+			raise ValueError(repr(s) + " - invalid amount (value too large)")
+		if amount <= 0:
+			raise ValueError(repr(s) + " - invalid amount (should be 1 or more)")
+		if not int(amount) == amount:
+			raise ValueError(repr(s) + " - invalid amount (should be integer)")
+		return int(amount)
+
 def withdraw(req, arg):
 	"""%withdraw <address> [amount] - Sends 'amount' coins to the specified dogecoin address. If no amount specified, sends the whole balance"""
 	if len(arg) == 0:
@@ -42,21 +60,10 @@ def withdraw(req, arg):
 	if len(arg) == 1:
 		amount = max(Transactions.balance(acct) - 1, 1)
 	else:
-		if arg[1] == "all":
-			arg[1] = str(max(Transactions.balance(acct) - 1, 1))
 		try:
-			amount = float(arg[1])
-			if math.isnan(amount):
-				raise ValueError
+			amount = parse_amount(arg[1], acct, all_offset = -1)
 		except ValueError as e:
-			return req.reply_private(repr(arg[1]) + " - invalid amount")
-		if amount > 1e12:
-			return req.reply_private(repr(arg[1]) + " - invalid amount (value too large)")
-		if amount <= 0:
-			return req.reply_private(repr(arg[1]) + " - invalid amount (should be 1 or more)")
-		if not int(amount) == amount:
-			return req.reply_private(repr(arg[1]) + " - invalid amount (should be integer)")
-		amount = int(amount)
+			return req.reply_private(str(e))
 	to = arg[0]
 	if not Transactions.verify_address(to):
 		return req.reply_private(to + " doesn't seem to be a valid dogecoin address")
@@ -86,21 +93,10 @@ def tip(req, arg):
 			return req.reply_private(to + " is not online")
 		else:
 			return req.reply_private(to + " is not identified with freenode services")
-	if arg[1] == "all":
-		arg[1] = str(Transactions.balance(acct))
 	try:
-		amount = float(arg[1])
-		if math.isnan(amount):
-			raise ValueError
+		amount = parse_amount(arg[1], acct)
 	except ValueError as e:
-		return req.reply_private(repr(arg[1]) + " - invalid amount")
-	if amount > 1e12:
-		return req.reply_private(repr(arg[1]) + " - invalid amount (value too large)")
-	if amount < 1:
-		return req.reply_private(repr(arg[1]) + " - invalid amount (should be 1 or more)")
-	if not int(amount) == amount:
-		return req.reply_private(repr(arg[1]) + " - invalid amount (should be integer)")
-	amount = int(amount)
+		return req.reply_private(str(e))
 	token = Logger.token()
 	try:
 		Transactions.tip(token, acct, toacct, amount)
@@ -123,26 +119,16 @@ def mtip(req, arg):
 	if Transactions.lock(acct):
 		return req.reply_private("Your account is currently locked")
 	for i in range(0, len(arg), 2):
-		if arg[i + 1] == "all":
-			arg[i + 1] = str(Transactions.balance(acct))
 		try:
-			amount = float(arg[i + 1])
-			if math.isnan(amount):
-				raise ValueError
+			arg[i + 1] = parse_amount(arg[i + 1], acct)
 		except ValueError as e:
-			return req.reply_private(repr(arg[i + 1]) + " - invalid amount")
-		if amount > 1e12:
-			return req.reply_private(repr(arg[i + 1]) + " - invalid amount (value too large)")
-		if amount < 1:
-			return req.reply_private(repr(arg[i + 1]) + " - invalid amount (should be 1 or more)")
-		if not int(amount) == amount:
-			return req.reply_private(repr(arg[i + 1]) + " - invalid amount (should be integer)")
+			return req.reply_private(str(e))
 	targets = []
 	amounts = []
 	total = 0
 	for i in range(0, len(arg), 2):
 		target = arg[i]
-		amount = int(float(arg[i + 1]))
+		amount = arg[i + 1]
 		found = False
 		for i in range(len(targets)):
 			if Irc.equal_nicks(targets[i], target):
@@ -191,21 +177,10 @@ def donate(req, arg):
 	if Transactions.lock(acct):
 		return req.reply_private("Your account is currently locked")
 	toacct = "mniip"
-	if arg[0] == "all":
-		arg[0] = str(Transactions.balance(acct))
 	try:
-		amount = float(arg[0])
-		if math.isnan(amount):
-			raise ValueError
+		amount = parse_amount(arg[0], acct)
 	except ValueError as e:
-		return req.reply_private(repr(arg[0]) + " - invalid amount")
-	if amount > 1e12:
-		return req.reply_private(repr(arg[0]) + " - invalid amount (value too large)")
-	if amount < 1:
-		return req.reply_private(repr(arg[0]) + " - invalid amount (should be 1 or more)")
-	if not int(amount) == amount:
-		return req.reply_private(repr(arg[0]) + " - invalid amount (should be integer)")
-	amount = int(amount)
+		return req.reply_private(str(e))
 	token = Logger.token()
 	try:
 		Transactions.tip(token, acct, toacct, amount)
