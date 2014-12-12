@@ -66,12 +66,12 @@ CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DE
 CREATE TABLE address_account (address character varying(34) NOT NULL, account character varying(16), used bit(1) DEFAULT B'0'::"bit" NOT NULL);
 CREATE TABLE locked (account character varying(16));
 CREATE TABLE lastblock (block character varying(64));
-CREATE TABLE txlog (timestamp double precision, token character varying(8), transaction character varying(64), source character varying(16), destination character varying(16), amount bigint);
+CREATE TABLE txlog (timestamp double precision, token character varying(8), source character varying(16), destination character varying(16), amount bigint, transaction character varying(64), address character varying(34));
 INSERT INTO lastblock VALUES ('0');
-ALTER TABLE ONLY accounts ADD CONSTRAINT accounts_pkey PRIMARY KEY (account);
-ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_pkey PRIMARY KEY (address);
-ALTER TABLE ONLY address_account ADD CONSTRAINT address_account_account_fkey FOREIGN KEY (account) REFERENCES accounts(account);
-ALTER TABLE ONLY locked ADD CONSTRAINT locked_pkey PRIMARY KEY (account);
+ALTER TABLE accounts ADD CONSTRAINT accounts_pkey PRIMARY KEY (account);
+ALTER TABLE address_account ADD CONSTRAINT address_account_pkey PRIMARY KEY (address);
+ALTER TABLE address_account ADD CONSTRAINT address_account_account_fkey FOREIGN KEY (account) REFERENCES accounts(account);
+ALTER TABLE locked ADD CONSTRAINT locked_pkey PRIMARY KEY (account);
 ```
     
 **Running it:**

@@ -30,8 +30,8 @@ except TypeError:
 	dogecoinrpc.connection.DogecoinConnection.listsinceblock = patchedlistsinceblock
 # End of monkey-patching
 
-def txlog(cursor, token, tx, src, dest, amt):
-	cursor.execute("INSERT INTO txlog VALUES (%s, %s, %s, %s, %s, %s)", (time.time(), token, tx, src, dest, amt))
+def txlog(cursor, token, amt, tx = None, address = None, src = None, dest = None):
+	cursor.execute("INSERT INTO txlog VALUES (%s, %s, %s, %s, %s, %s, %s)", (time.time(), token, src, dest, amt, tx, address))
 
 def notify_block(): 
 	global lastblock, unconfirmed
@@ -52,7 +52,7 @@ def notify_block():
 				if tx.confirmations < Config.config["confirmations"]:
 						unconfirmed[account] = unconfirmed.get(account, 0) + int(tx.amount)
 				else:
-					txlog(cur, Logger.token(), tx.txid.encode("ascii"), None, account, int(tx.amount))
+					txlog(cur, Logger.token(), int(tx.amount), tx = tx.txid.encode("ascii"), address = tx.address, dest = account)
 	cur.execute("UPDATE lastblock SET block = %s", (lb["lastblock"],))
 	db.commit()
 	lastblock = lb["lastblock"]
@@ -81,7 +81,7 @@ def tip(token, source, target, amount):
 	cur.execute("UPDATE accounts SET balance = balance + %s WHERE account = %s", (amount, target)) 
 	if not cur.rowcount:
 		cur.execute("INSERT INTO accounts VALUES (%s, %s)", (target, amount))
-	txlog(cur, token, None, source, target, amount)
+	txlog(cur, token, amount, src = source, dest = target)
 	db.commit()
 
 def tip_multiple(token, source, dict):
@@ -102,7 +102,7 @@ def tip_multiple(token, source, dict):
 		if not cur.rowcount:
 			cur.execute("INSERT INTO accounts VALUES (%s, %s)", (target, amount))
 	for target in dict:
-		txlog(cur, token, None, source, target, dict[target])
+		txlog(cur, token, dict[target], src = source, dest = target)
 	db.commit()
 
 def withdraw(token, account, address, amount): 
@@ -122,7 +122,7 @@ def withdraw(token, account, address, amount):
 		Logger.irclog("Emergency lock on account '%s'" % (account))
 		lock(account, True)
 		raise
-	txlog(cur, token, tx.encode("ascii"), account, None, amount)
+	txlog(cur, token, amount + 1, tx = tx.encode("ascii"), address = address, src = account)
 	db.commit()
 	return tx.encode("ascii")
 
