@@ -168,7 +168,7 @@ def mtip(req, arg):
 commands["mtip"] = mtip
 
 def donate(req, arg):
-	"""%donate <amount> - Donate 'amount' coins to the developers of this bot"""
+	"""%donate <amount> - Donate 'amount' coins to help fund the server Doger is running on"""
 	if len(arg) < 1:
 		return req.reply(gethelp("donate"))
 	acct = Irc.account_names([req.nick])[0]
@@ -176,7 +176,7 @@ def donate(req, arg):
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	if Transactions.lock(acct):
 		return req.reply_private("Your account is currently locked")
-	toacct = "mniip"
+	toacct = "@DONATIONS"
 	try:
 		amount = parse_amount(arg[0], acct)
 	except ValueError as e:
@@ -184,8 +184,7 @@ def donate(req, arg):
 	token = Logger.token()
 	try:
 		Transactions.tip(token, acct, toacct, amount)
-		req.reply("Donated Ɖ%i [%s]" % (amount, token))
-		req.privmsg(toacct, "Such %s donated Ɖ%i [%s]" % (req.nick, amount, token), priority = 10)
+		req.reply("Donated Ɖ%i, thank you very much for your donation [%s]" % (amount, token))
 	except Transactions.NotEnoughMoney:
 		req.reply_private("You tried to donate Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["donate"] = donate
@@ -212,7 +211,7 @@ def _help(req, arg):
 		else:
 			ident = "you're not identified"
 		req.say("I'm Doger, I'm an IRC dogecoin tipbot. To get help about a specific command, say \2%help <command>\2  Commands: %tip %balance %withdraw %deposit %mtip %donate %help".replace("%", Config.config["prefix"]))
-		req.say("Note that to receive or send tips you should be identified with freenode services (%s). For any support questions, including those related to lost coins, join ##doger" % (ident))
+		req.say(("Note that to receive or send tips you should be identified with freenode services (%s). Please consider donating with %%donate. For any support questions, including those related to lost coins, join ##doger" % (ident)).replace("%", Config.config["prefix"]))
 commands["help"] = _help
 
 def admin(req, arg):
