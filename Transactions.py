@@ -122,8 +122,8 @@ def withdraw(token, account, address, amount):
 		Logger.irclog("Emergency lock on account '%s'" % (account))
 		lock(account, True)
 		raise
-	txlog(cur, token, amount + 1, tx = tx.encode("ascii"), address = address, src = account)
 	db.commit()
+	txlog(cur, token, amount + 1, tx = tx.encode("ascii"), address = address, src = account)
 	return tx.encode("ascii")
 
 def deposit_address(account): 
@@ -144,7 +144,10 @@ def deposit_address(account):
 	return addr.encode("ascii")
 
 def verify_address(address):
-	return daemon().validateaddress(address).isvalid
+	if address.isalnum():
+		return daemon().validateaddress(address).isvalid
+	else:
+		return False
 
 def balances():
 	cur = database().cursor()
