@@ -312,6 +312,21 @@ def admin(req, arg):
 				req.reply("Done")
 			elif len(arg):
 				req.reply("locked" if Transactions.lock(arg[0]) else "not locked")
+		elif command == "ping":
+			t = time.time()
+			Irc.account_names(["."])
+			pingtime = time.time() - t
+			acc = Irc.account_names([req.nick])[0]
+			t = time.time()
+			Transactions.balance(acc)
+			dbreadtime = time.time() - t
+			t = time.time()
+			Transactions.lock(acc, False)
+			dbwritetime = time.time() - t
+			t = time.time()
+			Transactions.ping()
+			rpctime = time.time() - t
+			req.reply("Ping: %f, DB read: %f, DB write: %f, RPC: %f" % (pingtime, dbreadtime, dbwritetime, rpctime))
 
 commands["admin"] = admin
 

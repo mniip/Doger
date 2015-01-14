@@ -15,7 +15,7 @@ def log(spec, text):
 def irclog(text):
 	if Config.config.get("irclog", None):
 		for i in xrange(0, len(text), 350):
-			Irc.instance_send(Config.config["irclog"][0], ("PRIVMSG", Config.config["irclog"][1], text[i:i+300]), priority = 0)
+			Irc.instance_send(Config.config["irclog"][0], ("PRIVMSG", Config.config["irclog"][1], text[i:i+350]), priority = 0)
 
 def token():
 	m = md5.new()
