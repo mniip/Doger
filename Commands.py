@@ -78,21 +78,33 @@ def withdraw(req, arg):
 		Logger.irclog("InsufficientFunds while executing '%s' from '%s'" % (req.text, req.nick))
 commands["withdraw"] = withdraw
 
+def target_nick(target):
+	return target.split("@", 1)[0]
+
+def target_verify(target, accname):
+	s = target.split("@", 1)
+	if len(s) == 2:
+		return Irc.equal_nicks(s[1], accname)
+	else:
+		return True
+
 def tip(req, arg):
-	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname"""
+	"""%tip <target> <amount> - Sends 'amount' coins to the specified nickname. Nickname can be suffixed with @ and an account name, if you want to make sure you are tipping the correct person"""
 	if len(arg) < 2:
 		return req.reply(gethelp("tip"))
 	to = arg[0]
-	acct, toacct = Irc.account_names([req.nick, to])
+	acct, toacct = Irc.account_names([req.nick, target_nick(to)])
 	if not acct:
 		return req.reply_private("You are not identified with freenode services (see /msg NickServ help)")
 	if Transactions.lock(acct):
 		return req.reply_private("Your account is currently locked")
 	if not toacct:
 		if toacct == None:
-			return req.reply_private(to + " is not online")
+			return req.reply_private(target_nick(to) + " is not online")
 		else:
-			return req.reply_private(to + " is not identified with freenode services")
+			return req.reply_private(target_nick(to) + " is not identified with freenode services")
+	if not target_verify(to, toacct):
+		return req.reply_private("Account name mismatch")
 	try:
 		amount = parse_amount(arg[1], acct)
 	except ValueError as e:
@@ -103,8 +115,8 @@ def tip(req, arg):
 		if Irc.equal_nicks(req.nick, req.target):
 			req.reply("Done [%s]" % (token))
 		else:
-			req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, to, token))
-		req.privmsg(to, "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token), priority = 10)
+			req.say("Such %s tipped much Ɖ%i to %s! (to claim /msg Doger help) [%s]" % (req.nick, amount, target_nick(to), token))
+		req.privmsg(target_nick(to), "Such %s has tipped you Ɖ%i (to claim /msg Doger help) [%s]" % (req.nick, amount, token), priority = 10)
 	except Transactions.NotEnoughMoney:
 		req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (amount, Transactions.balance(acct)))
 commands["tip"] = tip
@@ -143,18 +155,20 @@ def mtip(req, arg):
 	balance = Transactions.balance(acct)
 	if total > balance:
 		return req.reply_private("You tried to tip Ɖ%i but you only have Ɖ%i" % (total, balance))
-	accounts = Irc.account_names(targets)
+	accounts = Irc.account_names([target_nick(target) for target in targets])
 	totip = {}
 	failed = ""
 	tipped = ""
 	for i in range(len(targets)):
-		if accounts[i]:
-			totip[accounts[i]] = amounts[i]
-			tipped += " %s %d" % (targets[i], amounts[i])
-		elif accounts[i] == None:
-			failed += " %s (offline)" % (targets[i])
+		if accounts[i] == None:
+			failed += " %s (offline)" % (target_nick(targets[i]))
+		elif accounts[i] == False:
+			failed += " %s (unidentified)" % (target_nick(targets[i]))
+		elif not target_verify(targets[i], accounts[i]):
+			failed += " %s (mismatch)" % (targets[i])
 		else:
-			failed += " %s (unidentified)" % (targets[i])
+			totip[accounts[i]] = totip.get(accounts[i], 0) + amounts[i]
+			tipped += " %s %d" % (target_nick(targets[i]), amounts[i])
 	token = Logger.token()
 	try:
 		Transactions.tip_multiple(token, acct, totip)
