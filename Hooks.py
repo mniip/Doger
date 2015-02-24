@@ -84,6 +84,7 @@ def run_command(cmd, req, arg):
 		Logger.log("ce", "".join(traceback.format_tb(tb)))
 		Logger.irclog("Error while executing '%s' from '%s': %s" % (req.text, req.nick, repr(e)))
 		Logger.irclog("".join(traceback.format_tb(tb)).replace("\n", " || "))
+		del tb
 
 def message(instance, source, target, text):
 	host = Irc.get_host(source)
