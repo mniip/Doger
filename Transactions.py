@@ -162,7 +162,7 @@ def balances():
 
 def get_info():
 	info = daemon().getinfo()
-	return (info, daemon().getblockhash(info.blocks))
+	return (info, daemon().getblockhash(info.blocks).encode("ascii"))
 
 def lock(account, state = None):
 	if state == None:

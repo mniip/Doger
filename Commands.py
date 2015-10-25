@@ -315,7 +315,7 @@ def admin(req, arg):
 			req.reply("Dogecoind: %.8f; Database: %.8f" % (dogecoind, database))
 		elif command == "blocks":
 			info, hashd = Transactions.get_info()
-			hashb = Transactions.lastblock
+			hashb = Transactions.lastblock.encode("ascii")
 			req.reply("Best block: " + hashd + ", Last tx block: " + hashb + ", Blocks: " + str(info.blocks) + ", Testnet: " + str(info.testnet))
 		elif command == "lock":
 			if len(arg) > 1:
