@@ -100,7 +100,7 @@ def parse(cmd):
 	return data
 
 def compile(*args):
-	data = list(args)
+	data = [arg.translate(None, "\n\r") for arg in args]
 	data[-1] = ':' + data[-1]
 	return " ".join(data)
 
