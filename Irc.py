@@ -242,6 +242,14 @@ def connect_instance(instance):
 		Logger.log("me", "ERROR while connecting " + instance)
 		Logger.log("me", repr(e))
 		Logger.log("me", "".join(traceback.format_tb(tb)))
+		Logger.log("mw", "Emptying whois queue")
+		Global.instances[instance].can_send.set()
+		try:
+			while True:
+				Global.instances[instance].whois_queue.get(False)[1].put(None)
+				Global.instances[instance].whois_queue.task_done()
+		except Queue.Empty:
+			pass
 		del Global.instances[instance]
 		threading.Thread(target = reconnect_later, args = (60, instance)).start()
 		return
