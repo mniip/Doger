@@ -231,11 +231,15 @@ def reconnect_later(t, instance):
 def connect_instance(instance):
 	Logger.log("c", instance + ": Connecting")
 	try:
-		host = random.choice(socket.gethostbyname_ex(Config.config["host"])[2])
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		hosts = socket.getaddrinfo(Config.config["host"], Config.config["port"], socket.AF_INET6 if Config.config.get("ipv6", False) else socket.AF_INET, socket.SOCK_STREAM)
+		entry = random.choice(hosts)
+		sock = socket.socket(entry[0], entry[1])
+		if Config.config.get("bindhost", None):
+			sock.bind((Config.config["bindhost"], 0))
 		if Config.config.get("ssl", None):
 			sock = ssl.wrap_socket(sock, ca_certs = Config.config["ssl"]["certs"], cert_reqs = ssl.CERT_REQUIRED)
-		sock.connect((host, Config.config["port"]))
+		sock.connect(entry[4])
+		Logger.log("c", instance + ": Connected to %s port %d" % (entry[4][0], entry[4][1]))
 		sock.settimeout(0.1)
 	except socket.error as e:
 		type, value, tb = sys.exc_info()

@@ -18,6 +18,9 @@ IRC tip bot in python.
 config = {
 	"host": "ircserverhostna.me",
 	"port": 6667,
+# optional:
+#	"ipv6": True,
+#	"bindhost": "10.0.0.1",
 	"user": "identname",
 	"rname": "Real name",
 	"confirmations": 4,
