@@ -1,6 +1,6 @@
-import socket, random, threading, Queue, sys, traceback, time, ssl
+import socket, random, threading, Queue, sys, traceback, time, ssl, signal
 from string import maketrans
-import Config, Global, Hooks, Logger
+import Config, Global, Hooks, Logger, Commands
 
 lowercase = "abcdefghijklmnopqrstuvwxyz[]~\\"
 uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ{}^|"
@@ -271,10 +271,20 @@ def connect_instance(instance):
 	instance_send(instance, ("NICK", instance), lock = False)
 	instance_send(instance, ("USER", Config.config["user"], "*", "*", Config.config["rname"]), lock = False)
 
+def on_SIGHUP(signum, frame):
+	cmd = Commands.commands.get("admin")
+	if cmd and Config.config.get("irclog"):
+		Logger.irclog("Received SIGHUP, reloading Config")
+		req = Hooks.Request(Config.config["irclog"][0], Config.config["irclog"][1], "@SIGHUP", "SIGHUP")
+		Hooks.run_command(cmd, req, ["reload", "Config"])
+
 def manager():
 	while True:
 		try:
-			cmd = Global.manager_queue.get(True)
+			try:
+				cmd = Global.manager_queue.get(True, 1)
+			except Queue.Empty:
+				continue
 			Logger.log("m", "Got " + repr(cmd))
 			if cmd[0] == "Spawn":
 				i = Instance(cmd[1])
@@ -315,6 +325,8 @@ def manager():
 					connect_instance(cmd[1])
 				else:
 					del Global.instances[cmd[1]]
+			elif cmd[0] == "Signal":
+				signal.signal(signal.SIGHUP, on_SIGHUP)
 			elif cmd[0] == "Die":
 				Logger.log("m", "Dying")
 				return
