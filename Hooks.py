@@ -124,6 +124,7 @@ def message(instance, source, target, text):
 				reply = src
 			else:
 				reply = target
+			commandline = commandline.rstrip(" \t")
 			if commandline.find(" ") == -1:
 				command = commandline
 				args = []
