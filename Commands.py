@@ -1,5 +1,5 @@
 # coding=utf8
-import sys, os, time, math, pprint
+import sys, os, time, math, pprint, traceback
 import Irc, Transactions, Blocknotify, Logger, Global, Hooks, Config
 
 commands = {}
@@ -239,7 +239,16 @@ def admin(req, arg):
 				reload(sys.modules[mod])
 			req.reply("Reloaded")
 		elif command == "exec" and Config.config.get("enable_exec", None):
-			exec(" ".join(arg).replace("$", "\n"))
+			try:
+				exec(" ".join(arg).replace("$", "\n"))
+			except Exception as e:
+				type, value, tb = sys.exc_info()
+				Logger.log("ce", "ERROR in " + req.instance + " : " + req.text)
+				Logger.log("ce", repr(e))
+				Logger.log("ce", "".join(traceback.format_tb(tb)))
+				req.reply(repr(e))
+				req.reply("".join(traceback.format_tb(tb)).replace("\n", " || "))
+				del tb
 		elif command == "ignore":
 			Irc.ignore(arg[0], int(arg[1]))
 			req.reply("Ignored")
