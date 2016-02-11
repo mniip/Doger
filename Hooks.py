@@ -12,8 +12,8 @@ def end_of_motd(instance, *_):
 		Irc.instance_send(instance, ("JOIN", channel))
 hooks["376"] = end_of_motd
 
-def ping(instance, *_):
-	Irc.instance_send(instance, ("PONG",), priority = 0)
+def ping(instance, source, *args):
+	Irc.instance_send(instance, tuple(("PONG",) + args), priority = 0, lock = False)
 hooks["PING"] = ping
 
 class Request(object):
