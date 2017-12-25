@@ -1,7 +1,7 @@
 # coding=utf8
 import traceback, sys, re, time, threading, Queue, socket, subprocess
 
-import Irc, Config, Transactions, Commands, Config, Global, Logger
+import Irc, Config, Transactions, Commands, Config, Global, Logger, Expire
 
 hooks = {}
 
@@ -139,6 +139,61 @@ def message(instance, source, target, text):
 						t.start()
 hooks["PRIVMSG"] = message
 
+def notice(instance, source, target, text):
+	if "@" in source and Irc.get_host(source) == "services." and Irc.get_nickname(source) == "NickServ":
+		m = re.match("Information on \x02(\\S*)\x02 \\(account \x02(\\S*)\x02\\):", text)
+		if m:
+			Global.svsdata = {"nick": m.group(1), "account": m.group(2)}
+			return
+		m = re.match("\x02(\\S*)\x02 is not registered\\.", text)
+		if m:
+			Global.svsdata = None
+			Expire.svsdata({"nick": m.group(1)})
+			return
+		if Global.svsdata != None:
+			m = re.match("Registered : ([^(]*) \\([^)]* ago\\)", text)
+			if m:
+				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
+				Global.svsdata["reg"] = int(time.mktime(ts))
+				return
+			m = re.match("User Reg\\.  : ([^(]*) \\([^)]* ago\\)", text)
+			if m:
+				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
+				Global.svsdata["userreg"] = int(time.mktime(ts))
+				return
+			m = re.match("Last seen  : ([^(]*) \\([^)]* ago\\)", text)
+			if m:
+				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
+				Global.svsdata["last"] = int(time.mktime(ts))
+				return
+			m = re.match("Last seen  : now", text)
+			if m:
+				Global.svsdata["last"] = int(time.time())
+				return
+			m = re.match("Last seen  : \\(about (\\d*) weeks ago\\)", text)
+			if m:
+				Global.svsdata["lastweeks"] = int(m.group(1))
+				return
+			m = re.match("User seen  : ([^(]*) \\([^)]* ago\\)", text)
+			if m:
+				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
+				Global.svsdata["userlast"] = int(time.mktime(ts))
+				return
+			m = re.match("User seen  : now", text)
+			if m:
+				Global.svsdata["userlast"] = int(time.time())
+				return
+			m = re.match("User seen  : \\(about (\\d*) weeks ago\\)", text)
+			if m:
+				Global.svsdata["userlastweeks"] = int(m.group(1))
+				return
+			m = re.match("\\*\\*\\* \x02End of Info\x02 \\*\\*\\*", text)
+			if m:
+				Expire.svsdata(Global.svsdata)
+				Global.svsdata = None
+				return
+hooks["NOTICE"] = notice
+
 def join(instance, source, channel, account, _):
 	if account == "*":
 		account = False
@@ -151,33 +206,46 @@ def join(instance, source, channel, account, _):
 			if nick in Global.account_cache[channel]:
 				Global.account_cache[channel][nick] = account
 				Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
+	if account != False:
+		Expire.bump_last(account)
 hooks["JOIN"] = join
 
 def part(instance, source, channel, *_):
 	nick = Irc.get_nickname(source)
+	account = None
 	with Global.account_lock:
 		if nick == instance:
 			del Global.account_cache[channel]
 			Logger.log("w", "Removing cache for " + channel)
 			return
 		if nick in Global.account_cache[channel]:
+			account = Global.account_cache[channel][nick]
+		if nick in Global.account_cache[channel]:
 			del Global.account_cache[channel][nick]
 			Logger.log("w", "Removing %s from %s" % (nick, channel))
+	if account != None and account != False:
+		Expire.bump_last(account)
 hooks["PART"] = part
 
 def kick(instance, _, channel, nick, *__):
+	account = None
 	with Global.account_lock:
 		if nick == instance:
 			del Global.account_cache[channel]
 			Logger.log("w", "Removing cache for " + channel)
 			return
 		if nick in Global.account_cache[channel]:
+			account = Global.account_cache[channel][nick]
+		if nick in Global.account_cache[channel]:
 			del Global.account_cache[channel][nick]
 			Logger.log("w", "Removing %s from %s" % (nick, channel))
+	if account != None and account != False:
+		Expire.bump_last(account)
 hooks["KICK"] = kick
 
 def quit(instance, source, _):
 	nick = Irc.get_nickname(source)
+	account = None
 	with Global.account_lock:
 		if nick == instance:
 			chans = []
@@ -190,29 +258,52 @@ def quit(instance, source, _):
 			return
 		for channel in Global.account_cache:
 			if nick in Global.account_cache[channel]:
+				account = Global.account_cache[channel][nick]
+				if account != None:
+					break
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
 				del Global.account_cache[channel][nick]
 				Logger.log("w", "Removing %s from %s" % (nick, channel))
+	if account != None and account != False:
+		Expire.bump_last(account)
 hooks["QUIT"] = quit
 
 def account(instance, source, account):
 	if account == "*":
 		account = False
 	nick = Irc.get_nickname(source)
+	account = None
 	with Global.account_lock:
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				account = Global.account_cache[channel][nick]
+				if account != None:
+					break
 		for channel in Global.account_cache:
 			if nick in Global.account_cache[channel]:
 				Global.account_cache[channel][nick] = account
 				Logger.log("w", "Propagating %s=%s into %s" % (nick, account, channel))
+	if account != None and account != False:
+		Expire.bump_last(account)
 hooks["ACCOUNT"] = account
 
 def _nick(instance, source, newnick):
 	nick = Irc.get_nickname(source)
+	account = None
 	with Global.account_lock:
+		for channel in Global.account_cache:
+			if nick in Global.account_cache[channel]:
+				account = Global.account_cache[channel][nick]
+				if account != None:
+					break
 		for channel in Global.account_cache:
 			if nick in Global.account_cache[channel]:
 				Global.account_cache[channel][newnick] = Global.account_cache[channel][nick]
 				Logger.log("w", "%s -> %s in %s" % (nick, newnick, channel))
 				del Global.account_cache[channel][nick]
+	if account != None and account != False:
+		Expire.bump_last(account)
 hooks["NICK"] = _nick
 
 def names(instance, _, __, eq, channel, names):

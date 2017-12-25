@@ -62,7 +62,7 @@ blocknotify=/usr/bin/touch blocknotify/blocknotify
 - Create a postgres database with the following schema:
 
 ```
-CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DEFAULT 0, CONSTRAINT balance CHECK ((balance >= 0)));
+CREATE TABLE accounts (account character varying(16) NOT NULL, balance bigint DEFAULT 0, registered bigint, last_seen bigint, last_check bigint, CONSTRAINT balance CHECK ((balance >= 0)));
 CREATE TABLE address_account (address character varying(34) NOT NULL, account character varying(16), used bit(1) DEFAULT B'0'::"bit" NOT NULL);
 CREATE TABLE locked (account character varying(16));
 CREATE TABLE lastblock (block character varying(64));
