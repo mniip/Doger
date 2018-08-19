@@ -10,9 +10,9 @@ Global.svsevent = threading.Event()
 def expirer(event):
 	try:
 		while not event.is_set():
-			time.sleep(30)
+			time.sleep(15)
 			cur = Transactions.database().cursor()
-			cur.execute("SELECT account FROM accounts WHERE (((last_seen < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '10 weeks')) IS NOT FALSE AND (last_check < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '6 hours')) IS NOT FALSE) OR ((last_seen > EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '10 weeks')) IS NOT FALSE AND (last_check < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '1 week')) IS NOT FALSE)) AND NOT EXISTS (SELECT * FROM locked WHERE locked.account = accounts.account) AND account NOT LIKE '@%' ORDER BY balance DESC LIMIT 1")
+			cur.execute("SELECT account FROM accounts WHERE (((last_seen < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '10 weeks')) IS NOT FALSE AND (last_check < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '6 hours')) IS NOT FALSE) OR ((last_seen > EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '10 weeks')) IS NOT FALSE AND (last_check < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - interval '1 week')) IS NOT FALSE)) AND NOT EXISTS (SELECT * FROM locked WHERE locked.account = accounts.account) AND account NOT LIKE '@%' ORDER BY COALESCE(last_check, 0) ASC, balance DESC LIMIT 1")
 			if cur.rowcount:
 				Irc.instance_send(Config.config["svs"], ("NS", "INFO " + Irc.sanitize_nickname(cur.fetchone()[0])))
 	except Exception as e:
