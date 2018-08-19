@@ -274,13 +274,7 @@ def account(instance, source, account):
 	if account == "*":
 		account = False
 	nick = Irc.get_nickname(source)
-	account = None
 	with Global.account_lock:
-		for channel in Global.account_cache:
-			if nick in Global.account_cache[channel]:
-				account = Global.account_cache[channel][nick]
-				if account != None:
-					break
 		for channel in Global.account_cache:
 			if nick in Global.account_cache[channel]:
 				Global.account_cache[channel][nick] = account
