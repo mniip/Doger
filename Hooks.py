@@ -1,5 +1,5 @@
 # coding=utf8
-import traceback, sys, re, time, threading, Queue, socket, subprocess
+import traceback, sys, re, time, datetime, pytz, threading, Queue, socket, subprocess
 
 import Irc, Config, Transactions, Commands, Config, Global, Logger, Expire
 
@@ -139,6 +139,11 @@ def message(instance, source, target, text):
 						t.start()
 hooks["PRIVMSG"] = message
 
+def date_timestamp(date):
+    dt = datetime.datetime.strptime(date, "%b %d %H:%M:%S %Y").replace(tzinfo = pytz.utc)
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)
+    return (dt - epoch).total_seconds()
+
 def notice(instance, source, target, text):
 	if "@" in source and Irc.get_host(source) == "services." and Irc.get_nickname(source) == "NickServ":
 		m = re.match("Information on \x02(\\S*)\x02 \\(account \x02(\\S*)\x02\\):", text)
@@ -153,18 +158,15 @@ def notice(instance, source, target, text):
 		if Global.svsdata != None:
 			m = re.match("Registered : ([^(]*) \\([^)]* ago\\)", text)
 			if m:
-				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
-				Global.svsdata["reg"] = int(time.mktime(ts))
+				Global.svsdata["reg"] = int(date_timestamp(m.group(1)))
 				return
 			m = re.match("User Reg\\.  : ([^(]*) \\([^)]* ago\\)", text)
 			if m:
-				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
-				Global.svsdata["userreg"] = int(time.mktime(ts))
+				Global.svsdata["userreg"] = int(date_timestamp(m.group(1)))
 				return
 			m = re.match("Last seen  : ([^(]*) \\([^)]* ago\\)", text)
 			if m:
-				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
-				Global.svsdata["last"] = int(time.mktime(ts))
+				Global.svsdata["last"] = int(date_timestamp(m.group(1)))
 				return
 			m = re.match("Last seen  : now", text)
 			if m:
@@ -176,8 +178,7 @@ def notice(instance, source, target, text):
 				return
 			m = re.match("User seen  : ([^(]*) \\([^)]* ago\\)", text)
 			if m:
-				ts = time.strptime(m.group(1), "%b %d %H:%M:%S %Y")
-				Global.svsdata["userlast"] = int(time.mktime(ts))
+				Global.svsdata["userlast"] = int(date_timestamp(m.group(1)))
 				return
 			m = re.match("User seen  : now", text)
 			if m:
