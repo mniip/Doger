@@ -25,28 +25,28 @@ def expirer(event):
 		del tb
 threading.Thread(target = expirer, args = (Global.svsevent,)).start()
 
-def bump_last(acct, t = None):
+def bump_last(ilike, t = None):
 	if t == None:
 		t = int(time.time())
 	db = Transactions.database()
 	cur = db.cursor()
-	cur.execute("UPDATE accounts SET last_seen = %s WHERE account = %s", (t, acct))
+	cur.execute("UPDATE accounts SET last_seen = %s WHERE account ILIKE %s", (t, ilike))
 	db.commit()
 
-def bump_check(acct):
+def bump_check(ilike):
 	db = Transactions.database()
 	cur = db.cursor()
-	cur.execute("UPDATE accounts SET last_check = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) WHERE account = %s", (acct,))
+	cur.execute("UPDATE accounts SET last_check = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) WHERE account ILIKE %s", (ilike,))
 	db.commit()
-
 
 def svsdata(data):
 	db = Transactions.database()
 	cur = db.cursor()
-	cur.execute("SELECT account, last_seen, registered FROM accounts WHERE account = %s", (data["nick"],))
+        ilike = data["nick"].replace("\\", "\\\\").replace("_", "\\_")
+	cur.execute("SELECT account, last_seen, registered FROM accounts WHERE account ILIKE %s", (ilike,))
 	if cur.rowcount:
 		acct, last_seen, registered = cur.fetchone()
-		bump_check(acct)
+		bump_check(ilike)
 		if "reg" not in data:
 			Logger.irclog("Dormant lock on account %s: not registered" % (acct))
 			Transactions.lock(acct, True)
@@ -55,19 +55,19 @@ def svsdata(data):
 			Transactions.lock(acct, True)
 		else:
 			if registered == None:
-				cur.execute("SELECT MAX(timestamp) FROM txlog WHERE destination = %s", (acct,))
+				cur.execute("SELECT MAX(timestamp) FROM txlog WHERE destination ILIKE %s", (ilike,))
 				lasttx = cur.fetchone()[0] if cur.rowcount else None
 				if lasttx != None and lasttx < data["reg"]:
 					Logger.irclog("Dormant lock on account %s: registered at %d, last tx at %d" % (acct, data["reg"], lasttx))
 					Transactions.lock(acct, True)
 				else:
-					cur.execute("UPDATE accounts SET registered = %s WHERE account = %s", (data["reg"], acct))
+					cur.execute("UPDATE accounts SET registered = %s WHERE account ILIKE %s", (ilike, acct))
 					db.commit()
 			if "userlast" in data:
-				bump_last(acct, data["userlast"])
+				bump_last(ilike, data["userlast"])
 			elif "last" in data:
-				bump_last(acct, data["last"])
+				bump_last(ilike, data["last"])
 			elif "userlastweeks" in data:
-				bump_last(acct, int(time.time()) - (data["userlastweeks"] + 1) * 86400 * 7 - 60)
+				bump_last(ilike, int(time.time()) - (data["userlastweeks"] + 1) * 86400 * 7 - 60)
 			elif "lastweeks" in data:
-				bump_last(acct, int(time.time()) - (data["lastweeks"] + 1) * 86400 * 7 - 60)
+				bump_last(ilike, int(time.time()) - (data["lastweeks"] + 1) * 86400 * 7 - 60)
